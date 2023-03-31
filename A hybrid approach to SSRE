@@ -1,1 +1,377 @@
+##### figures_and_tables.R #####################################################
+# Author: Samuel Sarkodie (S.K.Sarkodie2@newcastle.ac.uk)                      #
+# Last modified: 27/01/2023                                                    #
+################################################################################
+
+################################################################################
+# INSTALL AND LOAD REQUIRED PACKAGES                                           #
+################################################################################
+# install.packages("coda")
+# install.packages("colorspace")
+# install.packages("fda.usc")
+# install.packages("ggplot2")
+# install.packages("ggthemes")
+# install.packages("lme4")
+# install.packages("Metrics")
+# install.packages("patchwork")
+# install.packages("plyr")
+# install.packages("RColorBrewer")
+# install.packages("rjags")
+# install.packages("snowfall")
+# install.packages("tibble")
+# install.packages("tidyverse")
+# install.packages("truncnorm")
+library(coda)
+library(colorspace)
+library(fda.usc)
+library(ggplot2)
+library(ggthemes)
+library(lme4)
+library(Metrics)
+library(patchwork)
+library(plyr)
+library(RColorBrewer)
+library(rjags)
+library(snowfall)
+library(tibble)
+library(tidyverse)
+library(truncnorm)
+
+################################################################################
+# FUNCTION TO GENERATE DATA FROM A SINGLE CLUSTER                              #
+################################################################################
+
+data_one_cluster <- function(n, mu, allocation, tau, rho, sigma, type) {
+  sigma_c <- sqrt(rho * sigma^2)
+  sigma_e <- sqrt(sigma^2 - sigma_c^2)
+  if (type == "individual") {
+    rnorm(n, mu + allocation*tau + rnorm(1, sd = sigma_c), sigma_e)
+  } else if (type == "cluster mean") {
+    rnorm(1, mu + allocation*tau + rnorm(1, sd = sigma_c), sigma_e/sqrt(n))
+  }
+}
+
+################################################################################
+# FUNCTION TO RETURN SAMPLE SIZE REQUIRED BY A PG-CRT IN THE FREQUENTIST       #
+# FRAMEWORK                                                                    #
+################################################################################
+
+# Sample size calculation using IRT and design effect
+PG_SS <- function(alpha, beta, sigma, delta, n, rho) {
+  irt           <- 4*(qnorm(1 - alpha) + qnorm(1 - beta))^2*(sigma^2)/(delta^2)
+  design_effect <- 1 + (n - 1)*rho
+  ceiling(irt*design_effect/n)
+}
+
+################################################################################
+# FUNCTION TO SIMULATE IMPLEMENTATION OF SSR IN THE FREQUENTIST FRAMEWORK      #
+################################################################################
+
+sim_trial_freq <- function(alpha, beta, sigma, delta, n, rho, mu, tau, blinded,
+                           final_analysis, C_interim) {
+  
+  if (any(rho < 0, rho >= 1)) {
+    stop("rho must be in [0,1)")
+  }
+  
+  # Using C_interim clusters for the reestimation
+  allocation_before         <- rep(0:1, each = C_interim/2)
+  
+  # Store the cluster means before the IA
+  outcomes                  <- numeric(n*C_interim)
+  cluster_means_before      <- numeric(C_interim)
+  for (c in 1:C_interim) {
+    range_c                 <- (1 + n*(c - 1)):(n*c)
+    outcomes[range_c]       <- data_one_cluster(n, mu, allocation_before[c],
+                                                tau, rho, sigma, "individual")
+    cluster_means_before[c] <- mean(outcomes[range_c])
+  }
+  
+  # Analyse at individual level using mixed-model to extract rho_hat
+  data_interim              <-
+    tibble(cluster    = rep(1:C_interim, each = n),
+           allocation = rep(allocation_before, each = n),
+           outcome    = outcomes)
+  if (blinded) {
+    model_ind               <- lmer(outcome ~ (1 | cluster),
+                                    data = data_interim)
+  } else if (!blinded) {
+    model_ind               <- lmer(outcome ~ allocation + (1 | cluster),
+                                    data = data_interim)
+  }
+  
+  temp                      <- as.data.frame(summary(model_ind)$varcor)
+  rho_hat                   <- temp[1, 4]/(temp[1, 4] + temp[2, 4])
+  
+  # Reestimated required number of clusters after the IA
+  C_reest_exact             <- C_reest <- PG_SS(alpha, beta, sigma, delta, n,
+                                                rho_hat)
+  if (C_reest%%2 != 0) {
+    C_reest                 <- C_reest + 1
+  }
+  
+  # Remaining number clusters
+  C_remaining               <- C_reest - C_interim
+  
+  if (C_remaining <= 0) { # Then IA becomes FA
+    if (blinded) {
+      model_ind             <- lmer(outcome ~ allocation + (1 | cluster),
+                                    data = data_interim)
+    }
+    # Degrees of freedom for the t-distribution at the IA
+    interim_df              <- C_interim*n - C_interim - 1
+    return(c("C_reest_exact"   = C_reest_exact,
+             "C_final"         = C_interim,
+             "rho_hat_interim" = rho_hat,
+             "Reject H0"       =
+               as.numeric(summary(model_ind)$coefficients[2, 3] >
+                            qt(1 - alpha, interim_df))))
+  }
+  
+  if (!final_analysis) {
+    return(c("C_reest_exact"   = C_reest_exact,
+             "C_final"         = C_reest,
+             "rho_hat_interim" = rho_hat,
+             "Reject H0"       = NA))
+  }
+  
+  # Simulate the data from the remaining clusters
+  allocation_after          <- rep(0:1, each = C_remaining/2)
+  cluster_means_after       <- numeric(C_remaining)
+  
+  # Cluster means after the interim analysis
+  for (c in 1:C_remaining) {
+    cluster_means_after[c]  <- data_one_cluster(n, mu, allocation_after[c], tau,
+                                                rho_hat, sigma, "cluster mean")
+  }
+  
+  # Degrees of freedom for the t-distribution at the FA
+  final_df                  <- C_reest*n - C_reest - 1
+  
+  # Combine the data from before and after the interim analysis in to a single
+  # dataset for final analysis. Pass this dataset to lm()
+  model_mean                <-
+    lm(outcome ~ allocation,
+       data = tibble(allocation = c(allocation_before, allocation_after),
+                     outcome    = c(cluster_means_before, cluster_means_after)))
+  
+  c("C_reest_exact"   = C_reest_exact,
+    "C_final"         = C_reest,
+    "rho_hat_interim" = rho_hat,
+    "Reject H0"       =
+      as.numeric(summary(model_mean)$coefficients[2, 3] > qt(1- alpha,
+                                                             final_df)))
+  
+}
+
+# Function check
+sim_trial_freq(alpha = 0.025, beta = 0.2, sigma = 1.3, delta = 0.3, n = 17,
+               mu = 0, tau = 0.3, rho = 0.059, blinded = FALSE,
+               final_analysis = TRUE, C_interim = 8) # Small interim clusters
+
+sim_trial_freq(alpha = 0.025, beta = 0.2, sigma = 1.3, delta = 0.3, n = 17,
+               mu = 0, tau = 0.3, rho = 0.059, blinded = FALSE,
+               final_analysis = TRUE, C_interim = 26) # Large interim clusters
+
+
+
+################################################################################
+# FUNCTIONS TO CALCULATE SAMPLE SIZE REQUIRED BY A PG-CRT IN THE HYBRID        #
+# FRAMEWORK                                                                    #
+################################################################################
+
+# Frequentist power for a PG-CRT
+frequentist_power <- function(delta, rho, alpha, sigma, n, C) {
+  pnorm(delta*sqrt(C*n/(4*(1 + (n - 1)*rho)*sigma^2)) - qnorm(1 - alpha))
+}
+
+# Prior for rho at the design stage
+prior_density     <- function(rho, m, s) {
+  dtruncnorm(rho, 0, 1, m, s)
+}
+
+# Integrand in the definition of EP
+ep_integrand      <- function(rho, delta, alpha, sigma, n, C, time, m, s,
+                              posterior_density, normalisation_constant) {
+  if (time == "pre-trial") {
+    frequentist_power(delta, rho, alpha, sigma, n, C)*
+      prior_density(rho, m, s)
+  } else if (time == "interim") {
+    frequentist_power(delta, rho, alpha, sigma, n, C)*
+      posterior_density(rho)/normalisation_constant
+  }
+}
+
+# Expected power
+ep                <- function(delta, alpha, sigma, n, C, time, m, s,
+                              posterior_density, normalisation_constant) {
+  integrate(ep_integrand, 0, 1,
+            delta = delta, alpha = alpha, sigma = sigma, n = n, C = C,
+            time = time, m = m, s = s, posterior_density = posterior_density,
+            normalisation_constant = normalisation_constant)$value
+}
+
+################################################################################
+# FUNCTION TO RETURN THE POSTERIOR DISTRIBUTION FOR RHO AT THE IA              #
+################################################################################
+
+compute_posterior <- function(rho_hat, # Interim estimate of rho
+                              n, # Sample size per cluster
+                              C, # Number of clusters (at the interim)
+                              m, # Prior mean
+                              s, # Prior SD
+                              n.iter_update = 1000, # See ?rjags::update.jags
+                              n.iter_coda   = 10000, # See ?rjags::coda.samples
+                              n.chains      = 1, # See ?rjags::jags.model
+                              quiet         = TRUE, # See ?rjags::jags.model
+                              progress.bar  = "none") { # See ?rjags::update.jas
+  
+  # Use Equation (15) as the variance
+  model <- jags.model(
+    file     = textConnection(
+      "model{
+      # Likelihood
+      rho_hat ~ dnorm(rho, (n*(n - 1)*C)/(2*(1 - rho)^2*(1 + (n - 1)*rho)^2))
+      # Prior
+      rho ~ dnorm(m, 1/s_squared) T(0, 1)
+    }"
+    ),
+    data     = list(rho_hat   = rho_hat,
+                    n         = n,
+                    C         = C,
+                    m         = m,
+                    s_squared = s^2),
+    n.chains = n.chains,
+    quiet    = quiet
+  )
+  update(model,
+         n.iter       = n.iter_update,
+         progress.bar = progress.bar)
+  approxfun(density(as.matrix(coda.samples(model,
+                                           variable.names = "rho",
+                                           n.iter         = n.iter_coda,
+                                           progress.bar   =
+                                             progress.bar))[, 1]),
+            yleft  = 0,
+            yright = 0)
+}
+
+################################################################################
+# FUNCTION TO SIMULATE IMPLEMENTATION OF SSR IN THE HYBRID FRAMEWORK           #
+################################################################################
+
+sim_trial_hybrid <- function(delta, alpha, sigma, n, m, s, mu, tau, rho,
+                             blinded, desired_ep, C_interim, final_analysis) {
+  
+  allocation_before         <- rep(0:1, each = C_interim/2)
+  outcomes                  <- numeric(n*C_interim)
+  
+  # Store the cluster means before the interim analysis
+  cluster_means_before      <- numeric(C_interim)
+  for (c in 1:C_interim) {
+    range_c                 <- (1 + n*(c - 1)):(n*c)
+    outcomes[range_c]       <- data_one_cluster(n, mu, allocation_before[c],
+                                                tau, rho, sigma, "individual")
+    cluster_means_before[c] <- mean(outcomes[range_c])
+  }
+  
+  data_interim              <- tibble(cluster    = rep(1:C_interim, each = n),
+                                      allocation = rep(allocation_before,
+                                                       each = n),
+                                      outcome    = outcomes)
+  
+  # Analyse at individual level using mixed-model to extract rho_hat
+  if (blinded) {
+    model_ind               <- lmer(outcome ~ (1 | cluster),
+                                    data = data_interim)
+  } else if (!blinded) {
+    model_ind               <- lmer(outcome ~ allocation + (1 | cluster),
+                                    data = data_interim)
+  }
+  
+  # Extract rho_hat (reestimated ICC) from the mixed model
+  temp                      <- as.data.frame(summary(model_ind)$varcor)
+  rho_hat                   <- temp[1, 4]/(temp[1, 4] + temp[2, 4])
+  
+  # Take the value of rho_hat and return the posterior density that can be used
+  # in a loop to re-estimate C
+  posterior_density         <- compute_posterior(rho_hat, n, C_interim, m, s)
+  rho_x                     <- seq(0, 1, 0.0001)
+  normalisation_constant    <- int.simpson2(rho_x, posterior_density(rho_x))
+  
+  # Estimating the remaining number of clusters required with the new
+  # information
+  for (C in 1:10000) {
+    if (ep(delta, alpha, sigma, n, C, "interim", m, s, posterior_density,
+           normalisation_constant) >= desired_ep) {
+      C_reest_exact         <- C_reest <- C
+      break
+    }
+  }
+  if (C_reest%%2 != 0) {
+    C_reest                 <- C_reest + 1
+  }
+  
+  # Remaining number clusters
+  C_remaining               <- C_reest - C_interim
+  
+  if (C_remaining <= 0) { # Then interim analysis becomes final analysis
+    if (blinded) {
+      model_ind             <- lmer(outcome ~ allocation + (1 | cluster),
+                                    data = data_interim)
+    }
+    # Degrees of freedom for the t-distribution at the IA
+    interim_df              <- C_interim*n - C_interim - 1
+    return(c("C_reest_exact"   = C_reest_exact,
+             "C_final"         = C_interim,
+             "rho_hat_interim" = rho_hat,
+             "Reject H0"       =
+               as.numeric(summary(model_ind)$coefficients[2, 3] >
+                            qt(1 - alpha, interim_df))))
+  }
+  
+  if (!final_analysis) {
+    return(c("C_reest_exact"   = C_reest_exact,
+             "C_final"         = C_interim,
+             "rho_hat_interim" = rho_hat,
+             "Reject H0"       = NA))
+  }
+  
+  # Simulate the data from the remaining clusters
+  allocation_after          <- rep(0:1, each = C_remaining/2)
+  cluster_means_after       <- numeric(C_remaining)
+  
+  # cluster means after the interim analysis
+  for (c in 1:C_remaining) {
+    cluster_means_after[c]  <- data_one_cluster(n, mu, allocation_after[c], tau,
+                                                rho_hat, sigma, "cluster mean")
+  }
+  
+  # Degrees of freedom for the t-distribution at the final analysis
+  final_df                  <- C_reest*n - C_reest - 1
+  
+  # Combine the data from before and after the interim analysis in to a single
+  # dataset for final analysis. Pass this dataset to lm()
+  model_mean                <-
+    lm(outcome ~ allocation,
+       data = tibble(allocation = c(allocation_before, allocation_after),
+                     outcome    = c(cluster_means_before, cluster_means_after)))
+  
+  c("C_reest_exact"   = C_reest_exact,
+    "C_final"         = C_reest,
+    "rho_hat_interim" = rho_hat,
+    "Reject H0"       = as.numeric(summary(model_mean)$coefficients[2, 3] >
+                                     qt(1 - alpha, final_df)))
+  
+}
+
+# When m and s = 0 (uniform prior), the code breaks
+# But it will work for very small m and s
+# The variance (s^2) can never be zero
+
+sim_trial_hybrid(delta = 0.3, alpha = 0.025, sigma = 1.3, n = 17, m = 0.01,
+            s = 0.1, mu = 0, tau = 0.3, rho = 0.059, blinded = FALSE,
+            desired_ep = 0.8, C_interim = 26,
+            final_analysis = TRUE)
+
 
