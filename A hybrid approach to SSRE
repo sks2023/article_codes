@@ -848,6 +848,149 @@ cluster_av_results = tibble(framework     = c("Frequentist",
 
 cluster_av_results
 
+nplot_data <- tibble(framework        = rep(c("Frequentist",
+                                              "Frequentist",
+                                              "Frequentist",
+                                              "Frequentist",
+                                              "Hybrid",
+                                              "Hybrid",
+                                              "Hybrid",
+                                              "Hybrid",
+                                              "Hybrid",
+                                              "Hybrid",
+                                              "Hybrid",
+                                              "Hybrid",
+                                              "Hybrid",
+                                              "Hybrid",
+                                              "Hybrid",
+                                              "Hybrid"), each = sims),
+                        blinded       = rep(c("Blinded",
+                                              "Blinded",
+                                              "Unblinded",
+                                              "Unblinded",
+                                              "Blinded",
+                                              "Blinded",
+                                              "Blinded",
+                                              "Unblinded",
+                                              "Unblinded",
+                                              "Unblinded",
+                                              "Blinded",
+                                              "Blinded",
+                                              "Blinded",
+                                              "Unblinded",
+                                              "Unblinded",
+                                              "Unblinded"), each = sims),
+                        approach      = paste(blinded, framework, sep = "~"),
+                 
+                        s             = rep(c("Frequentist",
+                                              "Frequentist",
+                                              "Frequentist",
+                                              "Frequentist",
+                                              "s = 0.01",
+                                              "s = 0.10",
+                                              "s = 1.00",
+                                              "s = 0.01",
+                                              "s = 0.10",
+                                              "s = 1.00",
+                                              "s = 0.01",
+                                              "s = 0.10",
+                                              "s = 1.00",
+                                              "s = 0.01",
+                                              "s = 0.10",
+                                              "s = 1.00"), each = sims),
+                        label_partial =
+                          rep(c("Frequentist",
+                                "Frequentist",
+                                "Frequentist",
+                                "Frequentist",
+                                "Hybrid (s = 0.01)",
+                                "Hybrid (s = 0.10)",
+                                "Hybrid (s = 1.00)",
+                                "Hybrid (s = 0.01)",
+                                "Hybrid (s = 0.10)",
+                                "Hybrid (s = 1.00)",
+                                "Hybrid (s = 0.01)",
+                                "Hybrid (s = 0.10)",
+                                "Hybrid (s = 1.00)",
+                                "Hybrid (s = 0.01)",
+                                "Hybrid (s = 0.10)",
+                                "Hybrid (s = 1.00)"),
+                              each = sims),
+                      
+                        tau           = rep(c("tau == 0",
+                                              "tau == 0.3",
+                                              "tau == 0",
+                                              "tau == 0.3",
+                                              "tau == 0",
+                                              "tau == 0",
+                                              "tau == 0",
+                                              "tau == 0",
+                                              "tau == 0",
+                                              "tau == 0",
+                                              "tau == 0.3",
+                                              "tau == 0.3",
+                                              "tau == 0.3",
+                                              "tau == 0.3",
+                                              "tau == 0.3",
+                                              "tau == 0.3"), each = sims),
+                        C_reest       =
+                          c(blinded_typeI[[2]]$C_reest,
+                            blinded_power[[2]]$C_reest,
+                            unblinded_typeI[[2]]$C_reest,
+                            unblinded_power[[2]]$C_reest,
+                            blinded_hybrid_typeI[, 1][[2]]$C_reest,
+                            blinded_hybrid_typeI[, 2][[2]]$C_reest,
+                            blinded_hybrid_typeI[, 3][[2]]$C_reest,
+                            unblinded_hybrid_typeI[, 1][[2]]$C_reest,
+                            unblinded_hybrid_typeI[, 2][[2]]$C_reest,
+                            unblinded_hybrid_typeI[, 3][[2]]$C_reest,
+                            blinded_hybrid_power[, 1][[2]]$C_reest,
+                            blinded_hybrid_power[, 2][[2]]$C_reest,
+                            blinded_hybrid_power[, 3][[2]]$C_reest,
+                            unblinded_hybrid_power[, 1][[2]]$C_reest,
+                            unblinded_hybrid_power[, 2][[2]]$C_reest,
+                            unblinded_hybrid_power[, 3][[2]]$C_reest),
+                        
+                        rho_hat       =
+                          c(blinded_typeI[[2]]$rho_hat_interim,
+                            blinded_power[[2]]$rho_hat_interim,
+                            unblinded_typeI[[2]]$rho_hat_interim,
+                            unblinded_power[[2]]$rho_hat_interim,
+                            blinded_hybrid_typeI[, 1][[2]]$rho_hat_interim,
+                            blinded_hybrid_typeI[, 2][[2]]$rho_hat_interim,
+                            blinded_hybrid_typeI[, 3][[2]]$rho_hat_interim,
+                            unblinded_hybrid_typeI[, 1][[2]]$rho_hat_interim,
+                            unblinded_hybrid_typeI[, 2][[2]]$rho_hat_interim,
+                            unblinded_hybrid_typeI[, 3][[2]]$rho_hat_interim,
+                            blinded_hybrid_power[, 1][[2]]$rho_hat_interim,
+                            blinded_hybrid_power[, 2][[2]]$rho_hat_interim,
+                            blinded_hybrid_power[, 3][[2]]$rho_hat_interim,
+                            unblinded_hybrid_power[, 1][[2]]$rho_hat_interim,
+                            unblinded_hybrid_power[, 2][[2]]$rho_hat_interim,
+                            unblinded_hybrid_power[, 3][[2]]$rho_hat_interim))
+
+plot1_ = ggplot(nplot_data, aes(rho_hat, C_reest, colour   = s)) +
+  geom_line(aes(linetype = s)) +
+  geom_point()+
+  facet_grid(tau~blinded, labeller = label_parsed, scales="free_y") +
+  theme_bw()+
+  theme(legend.position = "bottom",
+        legend.title    = element_blank()) +
+  xlab(expression(hat(rho)[int])) +
+  ylab(expression(paste("Reestimated required number of clusters (",
+                        italic(C)[reest], ")")))+
+  scale_linetype_discrete(labels =
+                            c("Frequentist",
+                              expression(paste(italic(s), " = 0.01")),
+                              expression(paste(italic(s), " = 0.10")),
+                              expression(paste(italic(s), " = 1.00")))) +
+  scale_colour_colorblind(labels =
+                            c("Frequentist",
+                              expression(paste(italic(s), " = 0.01")),
+                              expression(paste(italic(s), " = 0.10")),
+                              expression(paste(italic(s), " = 1.00"))))
+plot1_ 
+
 
 plot_all_data <- tibble(framework     = rep(c("Frequentist",
                                               "Frequentist",
@@ -982,7 +1125,25 @@ plot_all_data <- tibble(framework     = rep(c("Frequentist",
                             blinded_hybrid_power[, 3][[2]]$C_reest,
                             unblinded_hybrid_power[, 1][[2]]$C_reest,
                             unblinded_hybrid_power[, 2][[2]]$C_reest,
-                            unblinded_hybrid_power[, 3][[2]]$C_reest))
+                            unblinded_hybrid_power[, 3][[2]]$C_reest),
+                        
+                        rho_hat       =
+                          c(blinded_typeI[[2]]$rho_hat_interim,
+                            blinded_power[[2]]$rho_hat_interim,
+                            unblinded_typeI[[2]]$rho_hat_interim,
+                            unblinded_power[[2]]$rho_hat_interim,
+                            blinded_hybrid_typeI[, 1][[2]]$rho_hat_interim,
+                            blinded_hybrid_typeI[, 2][[2]]$rho_hat_interim,
+                            blinded_hybrid_typeI[, 3][[2]]$rho_hat_interim,
+                            unblinded_hybrid_typeI[, 1][[2]]$rho_hat_interim,
+                            unblinded_hybrid_typeI[, 2][[2]]$rho_hat_interim,
+                            unblinded_hybrid_typeI[, 3][[2]]$rho_hat_interim,
+                            blinded_hybrid_power[, 1][[2]]$rho_hat_interim,
+                            blinded_hybrid_power[, 2][[2]]$rho_hat_interim,
+                            blinded_hybrid_power[, 3][[2]]$rho_hat_interim,
+                            unblinded_hybrid_power[, 1][[2]]$rho_hat_interim,
+                            unblinded_hybrid_power[, 2][[2]]$rho_hat_interim,
+                            unblinded_hybrid_power[, 3][[2]]$rho_hat_interim))
 
 plot_all_data$label = c(rep(var(blinded_typeI[[2]]$C_reest), times = sims),
                         rep(var(blinded_power[[2]]$C_reest), times = sims),
@@ -1002,6 +1163,9 @@ plot_all_data$label = c(rep(var(blinded_typeI[[2]]$C_reest), times = sims),
                         rep(var(unblinded_hybrid_power[, 3][[2]]$C_reest), times = sims))
 plot_all_data$label = round(plot_all_data$label, 2)
 plot_all_data$Label = paste("var = ",  plot_all_data$label)
+
+
+
 
 # Violin plot with boxplot embedded showing the variability in the reestimated 
 # sample sizes ****************************************************************
