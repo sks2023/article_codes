@@ -1,11 +1,52 @@
 ##### figures_and_tables.R #####################################################
 # Functions for sample size reestimation in a CRT                              #
 # Author: Samuel Sarkodie (S.K.Sarkodie2@newcastle.ac.uk)                      #
-# Last modified: 23/03/2024                                                    #
+# Last modified: 15/05/2024                                                    #
 ################################################################################
 
-#NOTE: All Simulations runs on 12 cores (Please check your CPUs and readjust)
+#NOTE: All Simulations run on 12 cores (Please check your CPUs and readjust)
 
+################################################################################
+# INSTALL AND LOAD REQUIRED PACKAGES                                           #
+################################################################################
+# install.packages("coda")
+# install.packages("colorspace")
+# install.packages("fda.usc")
+# install.packages("ggplot2")
+# install.packages("ggthemes")
+# install.packages("lme4")
+# install.packages("Metrics")
+# install.packages("patchwork")
+# install.packages("plyr")
+# install.packages("RColorBrewer")
+# install.packages("rjags")
+# install.packages("snowfall")
+# install.packages("tibble")
+# install.packages("tidyverse")
+# install.packages("truncnorm")
+# install.packages("xtable")
+# install.packages("matrixStats")
+# install.packages ("gridExtra")
+# install.packages("ggpubr")
+library(coda)
+library(colorspace)
+library(fda.usc)
+library(ggplot2)
+library(ggthemes)
+library(lme4)
+library(Metrics)
+library(patchwork)
+library(plyr)
+library(RColorBrewer)
+library(rjags)
+library(snowfall)
+library(tibble)
+library(tidyverse)
+library(truncnorm)
+library(xtable)
+library(matrixStats)
+library(gridExtra)
+library(ggpubr)
 ################################################################################
 # HELPER COLOUR PALETTE                                                        #
 ################################################################################
@@ -38,111 +79,13 @@ Turbo <- function(pal.min = 0,pal.max = 1,out.colors = NULL,pal = turbo_colormap
   return(out)
 }
 
-################################################################################
-# INSTALL AND LOAD REQUIRED PACKAGES                                           #
-################################################################################
-# install.packages("coda")
-# install.packages("colorspace")
-# install.packages("fda.usc")
-# install.packages("ggplot2")
-# install.packages("ggthemes")
-# install.packages("lme4")
-# install.packages("Metrics")
-# install.packages("patchwork")
-# install.packages("plyr")
-# install.packages("RColorBrewer")
-# install.packages("rjags")
-# install.packages("snowfall")
-# install.packages("tibble")
-# install.packages("tidyverse")
-# install.packages("truncnorm")
-# install.packages("xtable")
-# install.packages("matrixStats")
-library(coda)
-library(colorspace)
-library(fda.usc)
-library(ggplot2)
-library(ggthemes)
-library(lme4)
-library(Metrics)
-library(patchwork)
-library(plyr)
-library(RColorBrewer)
-library(rjags)
-library(snowfall)
-library(tibble)
-library(tidyverse)
-library(truncnorm)
-library(xtable)
-library(matrixStats)
-
-################################################################################
-# PLOTS OF SELECTED PRIOR DISTRIBUTION ****************************************#                                                                      
-################################################################################
-
-x_ext    <-  seq(0, 1, length.out = 1000)
-small    <- data.frame(x        = rep(x_ext, 3),
-                       dens     = c(prior_density(x_ext, 0.01, 0.01),
-                                    prior_density(x_ext, 0.01, 0.1),
-                                    prior_density(x_ext, 0.01, 1)),
-                       Prior    = rep(c("m = 0.01, s = 0.01",
-                                        "m = 0.01, s = 0.1",
-                                        "m = 0.01, s = 1.00"),
-                                      each = length(x_ext)),
-                       s        = factor(rep(c(0.01, 0.1, 1),
-                                             each = length(x_ext))),
-                       Scenario = "Small~prior~mean~(italic(m) == 0.01)")
-moderate <- data.frame(x        = rep(x_ext, 3),
-                       dens     = c(prior_density(x_ext, 0.059, 0.01),
-                                    prior_density(x_ext, 0.059, 0.1),
-                                    prior_density(x_ext, 0.059, 1)),
-                       Prior    = rep(c("m = 0.059, s = 0.01",
-                                        "m = 0.059, s = 0.1",
-                                        "m = 0.059, s = 1.00"),
-                                      each = length(x_ext)),
-                       s        = factor(rep(c(0.01, 0.1, 1),
-                                             each = length(x_ext))),
-                       Scenario =
-                         "Moderate~prior~mean~(italic(m) == 0.059)")
-large    <- data.frame(x        = rep(x_ext, 3),
-                       dens     = c(prior_density(x_ext, 0.1, 0.01),
-                                    prior_density(x_ext, 0.1, 0.1),
-                                    prior_density(x_ext, 0.1, 1)),
-                       Prior    = rep(c("m = 0.1, s = 0.01",
-                                        "m = 0.1, s = 0.1",
-                                        "m = 0.1, s = 1.00"),
-                                      each = length(x_ext)),
-                       s        = factor(rep(c(0.01, 0.1, 1.0),
-                                             each = length(x_ext))),
-                       Scenario = "Large~prior~mean~(italic(m) == 0.1)")
-pdata          <- rbind.fill(small, moderate, large)
-pdata$Scenario <-
-  factor(pdata$Scenario,
-         c("Small~prior~mean~(italic(m) == 0.01)",
-           "Moderate~prior~mean~(italic(m) == 0.059)",
-           "Large~prior~mean~(italic(m) == 0.1)"))
-p             <- ggplot(pdata, aes(x, dens, colour = s)) +
-  geom_line() +
-  facet_grid(.~Scenario, labeller = label_parsed) +
-  theme_bw() +
-  labs(x     = expression(rho),
-       y     = expression(paste(psi[italic(ICC)], "(", rho, "|", italic(m), ",",
-                                italic(s), ")", sep = ""))) +
-  theme(legend.position = "bottom",
-        legend.title    = element_blank()) +
-  guides(colour = guide_legend(nrow = 1)) +
-  scale_colour_colorblind(labels = c(expression(paste(italic(s), " = 0.01")),
-                                     expression(paste(italic(s), " = 0.1")),
-                                     expression(paste(italic(s), " = 1.00"))))
-p
-
 
 
 ################################################################################
-# FUNCTION TO GENERATE DATA FROM A SINGLE CLUSTER                              #
+# FUNCTION TO GENERATE DATA FROM A SINGLE CLUSTER OR CLUSTER SIZE              #
 ################################################################################
-
-set.seed(8810) # For reproducing the replicates
+# 
+# set.seed(8810) # For reproducing the replicates
 
 data_one_cluster <- function(n, mu, allocation, tau, rho, sigma, type) {
   sigma_c <- sqrt(rho * sigma^2)
@@ -151,6 +94,19 @@ data_one_cluster <- function(n, mu, allocation, tau, rho, sigma, type) {
     rnorm(n, mu + allocation*tau + rnorm(1, sd = sigma_c), sigma_e)
   } else if (type == "cluster mean") {
     rnorm(1, mu + allocation*tau + rnorm(1, sd = sigma_c), sigma_e/sqrt(n))
+  }
+}
+
+data_one_clustersize <- function(n, mu, allocation, tau, rho, sigma, type, cj) {
+  sigma_c <- sqrt(rho * sigma^2)
+  sigma_e <- sqrt(sigma^2 - sigma_c^2)
+  if (missing(cj)) {
+    cj    <- rnorm(1, sd = sigma_c)
+  }
+  if (type == "individual") {
+    rnorm(n, mu + allocation*tau + cj, sigma_e)
+  } else if (type == "cluster mean") {
+    rnorm(1, mu + allocation*tau + cj, sigma_e/sqrt(n))
   }
 }
 
@@ -327,7 +283,6 @@ sims            <- 10000 # simulation runs
 # Vectorize the function to take on different values of any given parameter
 sims_freq       <- Vectorize(sims_freq)
 
-
 # Power and type I error for blinded and unblinded
 unblinded_power <- sims_freq(delta = 0.3, beta = 0.2, alpha = 0.025,
                              sigma = 1.3, n = 17, mu = 0, tau = 0.3, rho = 0.059,
@@ -381,6 +336,8 @@ freq_data       <-
                              unblinded_typeI[, 1][[2]]$rho_hat_interim,
                              unblinded_power[, 1][[2]]$rho_hat_interim))
 
+
+
 ################################################################################
 # FUNCTIONS TO CALCULATE SAMPLE SIZE REQUIRED BY A PG-CRT IN THE HYBRID        #
 # FRAMEWORK                                                                    #
@@ -416,6 +373,8 @@ ep                <- function(delta, alpha, sigma, n, C, time, m, s,
             time = time, m = m, s = s, posterior_density = posterior_density,
             normalisation_constant = normalisation_constant, stop.on.error = FALSE)$value
 }
+
+
 
 ################################################################################
 # FUNCTION TO RETURN THE POSTERIOR DISTRIBUTION FOR RHO AT THE IA              #
@@ -462,57 +421,6 @@ compute_posterior <- function(rho_hat, # Interim estimate of rho
             yright = 0)
 }
 
-# Plot the modal updated estimate of the ICC based on possible interim estimates
-scenarios       <- expand.grid(m               = c(0.01, 0.059, 0.1),
-                               s               = c(0.01, 0.1,  1.00),
-                               rho_hat_interim = c(0.01, seq(0.05, 0.95, 0.05),
-                                                   0.99))
-modal_rho       <- numeric(nrow(scenarios))
-for (i in 1:nrow(scenarios)) {
-  posterior     <- compute_posterior(scenarios$rho_hat_interim[i], n = 17,
-                                     C = 26, m = scenarios$m[i],
-                                     s = scenarios$s[i])
-  modal_rho[i]  <- seq(0, 1, 0.0001)[which.max(posterior(seq(0, 1, 0.0001)))]
-}
-
-# Data for plotting the posterior of the interim estimate of the ICC
-data            <- tibble(m               = paste("m =", scenarios$m),
-                          s               = paste("s =", scenarios$s),
-                          m_s             =
-                            factor(paste("m = ", m, " s = ", s, sep = ""),
-                                   c("m = 0.01 s = 0.01",
-                                     "m = 0.059 s = 0.01",
-                                     "m = 0.1 s = 0.01",
-                                     "m = 0.01 s = 0.1",
-                                     "m = 0.059 s = 0.1",
-                                     "m = 0.1 s = 0.1",
-                                     "m = 0.01 s = 1",
-                                     "m = 0.059 s = 1",
-                                     "m = 0.1 s = 1")),
-                          rho_hat_interim = scenarios$rho_hat_interim,
-                          modal_rho       = modal_rho)
-
-# Plot of posterior density based on the interim estimate of the ICC
-ggplot(data = data, aes(x = rho_hat_interim, y = modal_rho, colour = m,
-                        linetype = s)) +
-  geom_line() +
-  geom_point() +
-  theme_bw() +
-  theme(legend.position = "bottom",
-        legend.title    = element_blank()) +
-  scale_colour_colorblind(labels =
-                            c(expression(paste(italic(m), " = 0.010")),
-                              expression(paste(italic(m), " = 0.059")),
-                              expression(paste(italic(m), " = 0.100")))) +
-  scale_linetype_discrete(labels =
-                            c(expression(paste(italic(s), " = 0.01")),
-                              expression(paste(italic(s), " = 0.10")),
-                              expression(paste(italic(s), " = 1.00")))) +
-  xlab(expression(hat(rho)[int])) +
-  ylab(expression(paste(italic(Mode), "{", psi[ICC], "(", rho, " | ",
-                        italic(m), ", ", italic(s), ", ", hat(rho)[int], ")}")))
-
-ggsave("figure2n.pdf", width = 16.5, height = 14, units = "cm")
 
 
 ################################################################################
@@ -624,6 +532,10 @@ sim_trial_hybrid <- function(delta, alpha, sigma, n, m, s, mu, tau, rho,
 
 }
 
+sim_trial_hybrid(delta = 0.3, alpha = 0.025, sigma =1.3, n = 17, rho = 0.059, mu = 0,
+                 tau = 0.3, blinded = TRUE, m = 0.059, s = 0.01, C_interim = 26, 
+                 final_analysis = TRUE, desired_ep = 0.8)
+
 # When m and s = 0 (uniform prior), the code breaks
 # But it will work for very small m and s
 # The variance (s^2) can never be zero
@@ -706,6 +618,7 @@ blinded_hybrid_typeI        <-
                   s = s, mu = 0, tau = 0, rho = 0.059, blinded = TRUE,
                   desired_ep = 0.8, C_interim = 26,
                   final_analysis = TRUE, replicates = sims), silent = TRUE)
+
 
 cluster_av_results = tibble(framework     = c("Frequentist",
                                         "Frequentist",
@@ -848,148 +761,6 @@ cluster_av_results = tibble(framework     = c("Frequentist",
 
 cluster_av_results
 
-nplot_data <- tibble(framework        = rep(c("Frequentist",
-                                              "Frequentist",
-                                              "Frequentist",
-                                              "Frequentist",
-                                              "Hybrid",
-                                              "Hybrid",
-                                              "Hybrid",
-                                              "Hybrid",
-                                              "Hybrid",
-                                              "Hybrid",
-                                              "Hybrid",
-                                              "Hybrid",
-                                              "Hybrid",
-                                              "Hybrid",
-                                              "Hybrid",
-                                              "Hybrid"), each = sims),
-                        blinded       = rep(c("Blinded",
-                                              "Blinded",
-                                              "Unblinded",
-                                              "Unblinded",
-                                              "Blinded",
-                                              "Blinded",
-                                              "Blinded",
-                                              "Unblinded",
-                                              "Unblinded",
-                                              "Unblinded",
-                                              "Blinded",
-                                              "Blinded",
-                                              "Blinded",
-                                              "Unblinded",
-                                              "Unblinded",
-                                              "Unblinded"), each = sims),
-                        approach      = paste(blinded, framework, sep = "~"),
-                 
-                        s             = rep(c("Frequentist",
-                                              "Frequentist",
-                                              "Frequentist",
-                                              "Frequentist",
-                                              "s = 0.01",
-                                              "s = 0.10",
-                                              "s = 1.00",
-                                              "s = 0.01",
-                                              "s = 0.10",
-                                              "s = 1.00",
-                                              "s = 0.01",
-                                              "s = 0.10",
-                                              "s = 1.00",
-                                              "s = 0.01",
-                                              "s = 0.10",
-                                              "s = 1.00"), each = sims),
-                        label_partial =
-                          rep(c("Frequentist",
-                                "Frequentist",
-                                "Frequentist",
-                                "Frequentist",
-                                "Hybrid (s = 0.01)",
-                                "Hybrid (s = 0.10)",
-                                "Hybrid (s = 1.00)",
-                                "Hybrid (s = 0.01)",
-                                "Hybrid (s = 0.10)",
-                                "Hybrid (s = 1.00)",
-                                "Hybrid (s = 0.01)",
-                                "Hybrid (s = 0.10)",
-                                "Hybrid (s = 1.00)",
-                                "Hybrid (s = 0.01)",
-                                "Hybrid (s = 0.10)",
-                                "Hybrid (s = 1.00)"),
-                              each = sims),
-                      
-                        tau           = rep(c("tau == 0",
-                                              "tau == 0.3",
-                                              "tau == 0",
-                                              "tau == 0.3",
-                                              "tau == 0",
-                                              "tau == 0",
-                                              "tau == 0",
-                                              "tau == 0",
-                                              "tau == 0",
-                                              "tau == 0",
-                                              "tau == 0.3",
-                                              "tau == 0.3",
-                                              "tau == 0.3",
-                                              "tau == 0.3",
-                                              "tau == 0.3",
-                                              "tau == 0.3"), each = sims),
-                        C_reest       =
-                          c(blinded_typeI[[2]]$C_reest,
-                            blinded_power[[2]]$C_reest,
-                            unblinded_typeI[[2]]$C_reest,
-                            unblinded_power[[2]]$C_reest,
-                            blinded_hybrid_typeI[, 1][[2]]$C_reest,
-                            blinded_hybrid_typeI[, 2][[2]]$C_reest,
-                            blinded_hybrid_typeI[, 3][[2]]$C_reest,
-                            unblinded_hybrid_typeI[, 1][[2]]$C_reest,
-                            unblinded_hybrid_typeI[, 2][[2]]$C_reest,
-                            unblinded_hybrid_typeI[, 3][[2]]$C_reest,
-                            blinded_hybrid_power[, 1][[2]]$C_reest,
-                            blinded_hybrid_power[, 2][[2]]$C_reest,
-                            blinded_hybrid_power[, 3][[2]]$C_reest,
-                            unblinded_hybrid_power[, 1][[2]]$C_reest,
-                            unblinded_hybrid_power[, 2][[2]]$C_reest,
-                            unblinded_hybrid_power[, 3][[2]]$C_reest),
-                        
-                        rho_hat       =
-                          c(blinded_typeI[[2]]$rho_hat_interim,
-                            blinded_power[[2]]$rho_hat_interim,
-                            unblinded_typeI[[2]]$rho_hat_interim,
-                            unblinded_power[[2]]$rho_hat_interim,
-                            blinded_hybrid_typeI[, 1][[2]]$rho_hat_interim,
-                            blinded_hybrid_typeI[, 2][[2]]$rho_hat_interim,
-                            blinded_hybrid_typeI[, 3][[2]]$rho_hat_interim,
-                            unblinded_hybrid_typeI[, 1][[2]]$rho_hat_interim,
-                            unblinded_hybrid_typeI[, 2][[2]]$rho_hat_interim,
-                            unblinded_hybrid_typeI[, 3][[2]]$rho_hat_interim,
-                            blinded_hybrid_power[, 1][[2]]$rho_hat_interim,
-                            blinded_hybrid_power[, 2][[2]]$rho_hat_interim,
-                            blinded_hybrid_power[, 3][[2]]$rho_hat_interim,
-                            unblinded_hybrid_power[, 1][[2]]$rho_hat_interim,
-                            unblinded_hybrid_power[, 2][[2]]$rho_hat_interim,
-                            unblinded_hybrid_power[, 3][[2]]$rho_hat_interim))
-
-plot1_ = ggplot(nplot_data, aes(rho_hat, C_reest, colour   = s)) +
-  geom_line(aes(linetype = s)) +
-  geom_point()+
-  facet_grid(tau~blinded, labeller = label_parsed, scales="free_y") +
-  theme_bw()+
-  theme(legend.position = "bottom",
-        legend.title    = element_blank()) +
-  xlab(expression(hat(rho)[int])) +
-  ylab(expression(paste("Reestimated required number of clusters (",
-                        italic(C)[reest], ")")))+
-  scale_linetype_discrete(labels =
-                            c("Frequentist",
-                              expression(paste(italic(s), " = 0.01")),
-                              expression(paste(italic(s), " = 0.10")),
-                              expression(paste(italic(s), " = 1.00")))) +
-  scale_colour_colorblind(labels =
-                            c("Frequentist",
-                              expression(paste(italic(s), " = 0.01")),
-                              expression(paste(italic(s), " = 0.10")),
-                              expression(paste(italic(s), " = 1.00"))))
-plot1_ 
 
 
 plot_all_data <- tibble(framework     = rep(c("Frequentist",
@@ -1166,7 +937,6 @@ plot_all_data$Label = paste("var = ",  plot_all_data$label)
 
 
 
-
 # Violin plot with boxplot embedded showing the variability in the reestimated 
 # sample sizes ****************************************************************
 ###############################################################################
@@ -1195,10 +965,66 @@ ggplot(plot_all_data, aes(x = label_partial, y = C_reest)) +
                                                  " = 1.00)"))))
 
 
+# PLOT OF SELECTED PRIOR DISTRIBUTIONS
+x_ext    <-  seq(0, 1, length.out = 1000)
+small    <- data.frame(x        = rep(x_ext, 3),
+                       dens     = c(prior_density(x_ext, 0.01, 0.01),
+                                    prior_density(x_ext, 0.01, 0.1),
+                                    prior_density(x_ext, 0.01, 1)),
+                       Prior    = rep(c("m = 0.01, s = 0.01",
+                                        "m = 0.01, s = 0.1",
+                                        "m = 0.01, s = 1.00"),
+                                      each = length(x_ext)),
+                       s        = factor(rep(c(0.01, 0.1, 1),
+                                             each = length(x_ext))),
+                       Scenario = "Small~prior~mean~(italic(m) == 0.01)")
+moderate <- data.frame(x        = rep(x_ext, 3),
+                       dens     = c(prior_density(x_ext, 0.059, 0.01),
+                                    prior_density(x_ext, 0.059, 0.1),
+                                    prior_density(x_ext, 0.059, 1)),
+                       Prior    = rep(c("m = 0.059, s = 0.01",
+                                        "m = 0.059, s = 0.1",
+                                        "m = 0.059, s = 1.00"),
+                                      each = length(x_ext)),
+                       s        = factor(rep(c(0.01, 0.1, 1),
+                                             each = length(x_ext))),
+                       Scenario =
+                         "Moderate~prior~mean~(italic(m) == 0.059)")
+large    <- data.frame(x        = rep(x_ext, 3),
+                       dens     = c(prior_density(x_ext, 0.1, 0.01),
+                                    prior_density(x_ext, 0.1, 0.1),
+                                    prior_density(x_ext, 0.1, 1)),
+                       Prior    = rep(c("m = 0.1, s = 0.01",
+                                        "m = 0.1, s = 0.1",
+                                        "m = 0.1, s = 1.00"),
+                                      each = length(x_ext)),
+                       s        = factor(rep(c(0.01, 0.1, 1.0),
+                                             each = length(x_ext))),
+                       Scenario = "Large~prior~mean~(italic(m) == 0.1)")
+prior_data          <- rbind.fill(small, moderate, large)
+prior_data$Scenario <-
+  factor(pdata$Scenario,
+         c("Small~prior~mean~(italic(m) == 0.01)",
+           "Moderate~prior~mean~(italic(m) == 0.059)",
+           "Large~prior~mean~(italic(m) == 0.1)"))
+prior_plot  <- ggplot(prior_data, aes(x, dens, colour = s)) +
+  geom_line() +
+  facet_grid(.~Scenario, labeller = label_parsed) +
+  theme_bw() +
+  labs(x     = expression(rho),
+       y     = expression(paste(psi[italic(ICC)], "(", rho, "|", italic(m), ",",
+                                italic(s), ")", sep = ""))) +
+  theme(legend.position = "bottom",
+        legend.title    = element_blank()) +
+  guides(colour = guide_legend(nrow = 1)) +
+  scale_colour_colorblind(labels = c(expression(paste(italic(s), " = 0.01")),
+                                     expression(paste(italic(s), " = 0.1")),
+                                     expression(paste(italic(s), " = 1.00"))))
+prior_plot
+
 ################################################################################
 #Proportion of times the re-estimated sample size is correctly specified(m = p)#
 ################################################################################
-
 m_s          <- expand.grid(blinded = c(TRUE, FALSE),
                         tau = c(0, 0.3))
 correct      <- numeric(nrow(m_s))
@@ -1211,9 +1037,9 @@ for (i in 1:nrow(m_s)) {
                        blinded = m_s$blinded[i],
                        final_analysis = TRUE, C_interim = 26, 
                        replicates = sims), silent = TRUE)[,1]$results
-  overpower[i]  <- mean(results_i[, 1] > 71)
-  underpower[i] <- mean(results_i[, 1] < 65)
-  correct[i]    <- mean(results_i[, 1] >= 65 & results_i[, 1] <= 71)
+  overpower[i]  <- mean(results_i[, 1] > 1.1*68)
+  underpower[i] <- mean(results_i[, 1] < 0.9*68)
+  correct[i]    <- mean(results_i[, 1] >= 0.9*68 & results_i[, 1] <= 1.1*68)
   message("..completed row ", i, "..")
 }
 
@@ -1244,9 +1070,9 @@ for (i in 1:nrow(scenarios_hybrid)) {
                          blinded = scenarios_hybrid$blinded[i], desired_ep = 0.8,
                          C_interim = 26, final_analysis = TRUE, 
                          replicates = sims), silent = TRUE)[,1]$results
-  hybrid_overpower[i]  <- mean(results_i[, 1] > 71)
-  hybrid_underpower[i] <- mean(results_i[, 1] < 65)
-  hybrid_correct[i]    <- mean(results_i[, 1] >= 65 & results_i[, 1] <= 71)
+  hybrid_overpower[i]  <- mean(results_i[, 1] > 75)
+  hybrid_underpower[i] <- mean(results_i[, 1] < 61)
+  hybrid_correct[i]    <- mean(results_i[, 1] >= 61 & results_i[, 1] <= 75)
   message("..completed row ", i, "..")
 }
 
@@ -1260,34 +1086,43 @@ hybrid_proportion = tibble(tau                = scenarios_hybrid$tau,
 hybrid_proportion 
 
 
-
 ################################################################################
 #Proportion of times the re-estimated sample size is correctly specified(m =/ p)
 ################################################################################
-rho          <- seq(0.01, 0.2, length.out = 10)
-m_s          <- expand.grid(blinded = c(TRUE, FALSE),
-                            rho = rho)
-correct      <- numeric(nrow(m_s))
-overpower    <- numeric(nrow(m_s))
-underpower   <- numeric(nrow(m_s))
-for (i in 1:nrow(m_s)) {
+rho                        <- seq(0.01, 0.2, length.out = 10)
+freq_ss                    <- numeric(length(rho))
+for (i in 1:length(rho)) {
+  freq_ss[i]               <- PG_SS(alpha = 0.025, beta = 0.2, sigma = 1.3,
+                                    delta = 0.3, n = 17, rho = rho[i])
+}
+names(rho)                 <- names(freq_ss) <- rho
+# Different frequentist scenarios to evaluate
+scenarios_frequentist      <- expand.grid(blinded = c(TRUE, FALSE),
+                                          rho     = rho)
+results_frequentist        <- list()
+
+correct      <- numeric(nrow(scenarios_frequentist))
+overpower    <- numeric(nrow(scenarios_frequentist))
+underpower   <- numeric(nrow(scenarios_frequentist))
+for (i in 1:nrow(scenarios_frequentist)) {
   results_i                 <-
     tryCatch(sims_freq(alpha = 0.025, beta = 0.2, sigma = 1.3, delta = 0.3, n = 17,
-                       rho = m_s$rho[i], mu = 0, tau = 0.3,
-                       blinded = m_s$blinded[i],
+                       rho = scenarios_frequentist$rho[i], mu = 0, tau = 0.3,
+                       blinded = scenarios_frequentist$blinded[i],
                        final_analysis = TRUE, C_interim = 26, 
                        replicates = sims), silent = TRUE)[,1]$results
-  overpower[i]  <- mean(results_i[, 1] > 71)
-  underpower[i] <- mean(results_i[, 1] < 65)
-  correct[i]    <- mean(results_i[, 1] >= 65 & results_i[, 1] <= 71)
+  overpower[i]  <- mean(results_i[, 1] > 1.1*freq_ss[as.character(scenarios_frequentist$rho[i])])
+  underpower[i] <- mean(results_i[, 1] < 0.9*freq_ss[as.character(scenarios_frequentist$rho[i])])
+  correct[i]    <- mean(results_i[, 1] >= 0.9*freq_ss[as.character(scenarios_frequentist$rho[i])] 
+                        & results_i[, 1] <= 1.1*freq_ss[as.character(scenarios_frequentist$rho[i])])
   message("..completed row ", i, "..")
 }
 
 
 
 
-misspecified_prop_freq      <- tibble(blinded     = m_s$blinded,
-                                      rho         = m_s$rho,
+misspecified_prop_freq      <- tibble(blinded     = scenarios_frequentist$blinded,
+                                      rho         = scenarios_frequentist$rho,
                                       correct     = correct,
                                       underpower  = underpower,
                                       overpower   = overpower)
@@ -1310,20 +1145,21 @@ for (i in 1:nrow(scenarios_hybrid)) {
                          mu = 0, tau = 0.3, rho = scenarios_hybrid$rho[i],
                          blinded = scenarios_hybrid$blinded[i], desired_ep = 0.8,
                          C_interim = 26, final_analysis = TRUE, 
-                         replicates = sims), silent = TRUE)[,1][[2]]
-  hybrid_overpower[i]  <- mean(results_i[, 1] > 71)
-  hybrid_underpower[i] <- mean(results_i[, 1] < 65)
-  hybrid_correct[i]    <- mean(results_i[, 1] >= 65 & results_i[, 1] <= 71)
+                         replicates = sims), silent = TRUE)[,1]$results
+  hybrid_overpower[i]  <- mean(results_i[, 1] > 1.1*freq_ss[as.character(scenarios_hybrid$rho[i])])
+  hybrid_underpower[i] <- mean(results_i[, 1] < 0.9*freq_ss[as.character(scenarios_hybrid$rho[i])])
+  hybrid_correct[i]    <- mean(results_i[, 1] >= 0.9*freq_ss[as.character(scenarios_hybrid$rho[i])] 
+                               & results_i[, 1] <= 1.1*freq_ss[as.character(scenarios_hybrid$rho[i])])
   message("..completed row ", i, "..")
 }
 
-misspecified_prop_hyb = tibble(rho     = scenarios_hybrid$rho,
+misspecified_prop_hyb =  tibble(                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               misspecified_prop_hyb = tibble(rho     = scenarios_hybrid$rho,
                            s           = scenarios_hybrid$s,
                            m           = scenarios_hybrid$m,
                            blinded     = scenarios_hybrid$blinded,
                            correct     = hybrid_correct, 
                            underrpower = hybrid_underpower, 
-                           overpower   = hybrid_overpower)
+                           overpower   = hybrid_overpower))
 
 misspecified_prop_hyb 
 
@@ -1351,13 +1187,13 @@ data_hybridp                <- tibble(framework      = "Hybrid",
 
 data_frequentistp           <- tibble(framework      = "Frequentist",
                                       blinded        =
-                                        m_s$blinded,
+                                        scenarios_frequentist$blinded,
                                       label_partial  = "Frequentist",
                                       label_complete = paste(blinded, framework,
                                                              sep = "~"),
                                       m         = NA,
                                       s         = "s = 0.01", # Set to make plot look corect
-                                      rho            = m_s$rho,
+                                      rho            = scenarios_frequentist$rho,
                                       correct   = correct, 
                                       underpower = underpower, 
                                       overpower = overpower)
@@ -1368,12 +1204,13 @@ proportion_data$label_partial         <- factor(proportion_data$label_partial,
                                                   "m = 0.059",
                                                   "m = 0.1"))
 proportion_data$blinded_convert       <- "Unblinded"
-proportion_data$blinded_convert[which(data$blinded)] <- "Blinded"
+proportion_data$blinded_convert[which(proportion_data$blinded)] <- "Blinded"
 proportion_data
 
 # PLOTS ***********************************************************************
 ###############################################################################
 
+#highly informative prior (S = 0.01)
 proportion_data0.01 = proportion_data%>%
   filter(framework %in% c("Hybrid", "Frequentist") & s %in% c("s = 0.01"))
 prop_data1 = tibble(framework = rep(proportion_data0.01$framework, 3),
@@ -1383,36 +1220,11 @@ prop_data1 = tibble(framework = rep(proportion_data0.01$framework, 3),
                     values = c(proportion_data0.01$correct, 
                                proportion_data0.01$underpower,
                                proportion_data0.01$overpower),
-                    metric = rep(c("% Correct", "% Underpowered", "% Overpowered"), 
+                    metric = rep(c("Proportion Correct", "Proportion Underpowered",
+                                   "Proportion Overpowered"), 
                                  each = nrow(proportion_data0.01)))
 
-proportion_data0.1 = proportion_data%>%
-  filter(framework %in% c("Hybrid", "Frequentist") & s %in% c("s = 0.01"))
-prop_data2 = tibble(framework = rep(proportion_data0.1$framework, 3),
-                    blinded_convert = rep(proportion_data0.1$blinded_convert, 3),
-                    label_partial = rep(proportion_data0.1$label_partial, 3),
-                    rho = rep(proportion_data0.1$rho, 3),
-                    values = c(proportion_data0.1$correct, 
-                               proportion_data0.1$underpower,
-                               proportion_data0.1$overpower),
-                    metric = rep(c("% Correct", "% Underpowered", "% Overpowered"), 
-                                 each = nrow(proportion_data0.1)))
-
-
-proportion_data1 = proportion_data%>%
-  filter(framework %in% c("Hybrid", "Frequentist") & s %in% c("s = 0.01"))
-prop_data3 = tibble(framework = rep(proportion_data1$framework, 3),
-                    blinded_convert = rep(proportion_data1$blinded_convert, 3),
-                    label_partial = rep(proportion_data1$label_partial, 3),
-                    rho = rep(proportion_data1$rho, 3),
-                    values = c(proportion_data1$correct, 
-                               proportion_data1$underpower,
-                               proportion_data1$overpower),
-                    metric = rep(c("% Correct", "% Underpowered", "% Overpowered"), 
-                                 each = nrow(proportion_data1)))
-
-
-plot1 = ggplot(prop_data1, aes(rho, values, colour   = label_partial)) +
+S0.01 = ggplot(prop_data1, aes(rho, values, colour   = label_partial)) +
   geom_line(aes(linetype = label_partial)) +
   geom_point() +
   facet_grid(metric~blinded_convert, scales="free_y") +
@@ -1425,17 +1237,39 @@ plot1 = ggplot(prop_data1, aes(rho, values, colour   = label_partial)) +
                             c("Frequentist",
                               expression(paste(italic(m), " = 0.010")),
                               expression(paste(italic(m), " = 0.059")),
-                              expression(paste(italic(m), " = 0.100")))) +
+                              expression(paste(italic(m), " = 0.100"))
+                            )) +
   scale_colour_colorblind(labels =
                             c("Frequentist",
                               expression(paste(italic(m), " = 0.010")),
                               expression(paste(italic(m), " = 0.059")),
-                              expression(paste(italic(m), " = 0.100"))))+
+                              expression(paste(italic(m), " = 0.100"))
+                            ))+
   ggtitle(expression(paste(italic("Highly informative prior (s"), " = 0.01)")))
-plot1 
 
+S0.01
 
-plot2 = ggplot(prop_data2, aes(rho, values, colour   = label_partial)) +
+#weakly informative prior (S = 0.1)
+pdata_h = proportion_data%>%
+  filter(s %in% c("s = 0.1") & framework %in% c("Hybrid", "Frequentist"))
+
+pdata_f = proportion_data%>%
+  filter(framework == "Frequentist")
+
+proportion_data0.1 = rbind(pdata_h, pdata_f)
+  
+prop_data2 = tibble(framework = rep(proportion_data0.1$framework, 3),
+                    blinded_convert = rep(proportion_data0.1$blinded_convert, 3),
+                    label_partial = rep(proportion_data0.1$label_partial, 3),
+                    rho = rep(proportion_data0.1$rho, 3),
+                    values = c(proportion_data0.1$correct, 
+                               proportion_data0.1$underpower,
+                               proportion_data0.1$overpower),
+                    metric = rep(c("Proportion Correct", "Proportion Underpowered", 
+                                   "Proportion Overpowered"), 
+                                 each = nrow(proportion_data0.1)))
+
+S0.1 = ggplot(prop_data2, aes(rho, values, colour   = label_partial)) +
   geom_line(aes(linetype = label_partial)) +
   geom_point() +
   facet_grid(metric~blinded_convert, scales="free_y") +
@@ -1456,9 +1290,31 @@ plot2 = ggplot(prop_data2, aes(rho, values, colour   = label_partial)) +
                               expression(paste(italic(m), " = 0.100"))))+
   ggtitle(expression(paste(italic("Weakly informative prior (s"), " = 0.1)")))
 
-plot2
+S0.1
 
-plot3 = ggplot(prop_data3, aes(rho, values, colour   = label_partial)) +
+#Non-informative prior(S = 1)
+pdata_1 = proportion_data%>%
+  filter(s %in% c("s = 1") & framework %in% c("Hybrid", "Frequentist"))
+
+pdata_f = proportion_data%>%
+  filter(framework == "Frequentist")
+
+proportion_data1 = rbind(pdata_1, pdata_f)
+
+prop_data3 = tibble(framework = rep(proportion_data1$framework, 3),
+                    blinded_convert = rep(proportion_data1$blinded_convert, 3),
+                    label_partial = rep(proportion_data1$label_partial, 3),
+                    rho = rep(proportion_data1$rho, 3),
+                    values = c(proportion_data1$correct, 
+                               proportion_data1$underpower,
+                               proportion_data1$overpower),
+                    metric = rep(c("Proportion Correct", "Proportion Underpowered", 
+                                   "Proportion Overpowered"), 
+                                 each = nrow(proportion_data1)))
+
+
+
+S1 = ggplot(prop_data3, aes(rho, values, colour   = label_partial)) +
   geom_line(aes(linetype = label_partial)) +
   geom_point() +
   facet_grid(metric~blinded_convert, scales="free_y") +
@@ -1479,20 +1335,22 @@ plot3 = ggplot(prop_data3, aes(rho, values, colour   = label_partial)) +
                               expression(paste(italic(m), " = 0.100"))))+
   ggtitle(expression(paste(italic("Non-informative prior (s"), " = 1)")))
 
-plot3
+S1
+
 
 ################################################################################
-# CHECKING HOW PRIOR MEAN MISSPECIFICATION IMPACTS HYBRID SSR PERFORMANCE      #
+# CHECKING HOW THE PRIOR MEAN MISSPECIFICATION IMPACTS HYBRID SSR PERFORMANCE  #
 ################################################################################
-# Different rho to consider and associated required sample size of frequentist
-# design
-rho                        <- seq(0.01, 0.2, length.out = 10)
+# Using MSE, BIAS, and POWER to evaluate the impact of misspecification
+
 freq_ss                    <- numeric(length(rho))
 for (i in 1:length(rho)) {
   freq_ss[i]               <- PG_SS(alpha = 0.025, beta = 0.2, sigma = 1.3,
                                     delta = 0.3, n = 17, rho = rho[i])
 }
+
 names(rho)                 <- names(freq_ss) <- rho
+
 # Different frequentist scenarios to evaluate
 scenarios_frequentist      <- expand.grid(blinded = c(TRUE, FALSE),
                                           rho     = rho)
@@ -1645,36 +1503,17 @@ power                      <- ggplot(data, aes(rho, power,
                               expression(paste(italic(m), " = 0.100"))))
 
 
-
-
+#Highly informative prior (S = 0.01)
 data0.01 = data%>%
   filter(framework %in% c("Hybrid", "Frequentist") & s %in% c("s = 0.01"))
-pdata1 = tibble(framework = rep(data0.01$framework, 3),
+data0.01 = tibble(framework = rep(data0.01$framework, 3),
                 blinded_convert = rep(data0.01$blinded_convert, 3),
                 label_partial = rep(data0.01$label_partial, 3),
                 rho = rep(data0.01$rho, 3),
                 values = c(data0.01$bias, data0.01$mse, data0.01$power),
                 metric = rep(c("Bias", "MSE", "Power"), each = nrow(data0.01)))
 
-data0.1 = data%>%
-  filter(s == "s = 0.1" | framework == "Frequentist")
-pdata2 = tibble(framework = rep(data0.1$framework, 3),
-                blinded_convert = rep(data0.1$blinded_convert, 3),
-                label_partial = rep(data0.1$label_partial, 3),
-                rho = rep(data0.1$rho, 3),
-                values = c(data0.1$bias, data0.1$mse, data0.1$power),
-                metric = rep(c("Bias", "MSE", "Power"), each = nrow(data0.1)))
-
-data1 = data%>%
-  filter(s == "s = 1" | framework == "Frequentist")
-pdata3 = tibble(framework = rep(data1$framework, 3),
-                blinded_convert = rep(data1$blinded_convert, 3),
-                label_partial = rep(data1$label_partial, 3),
-                rho = rep(data1$rho, 3),
-                values = c(data1$bias, data1$mse, data1$power),
-                metric = rep(c("Bias", "MSE", "Power"), each = nrow(data1)))
-
-p0.01 = ggplot(pdata1, aes(rho, values, colour   = label_partial)) +
+p0.01 = ggplot(data0.01, aes(rho, values, colour   = label_partial)) +
   geom_line(aes(linetype = label_partial)) +
   geom_point() +
   facet_grid(metric~blinded_convert, scales="free_y") +
@@ -1696,9 +1535,18 @@ p0.01 = ggplot(pdata1, aes(rho, values, colour   = label_partial)) +
   ggtitle(expression(paste(italic("Highly informative prior (s"), " = 0.01)")))
 p0.01 
 
-ggsave("hipP.pdf")
 
-p0.1 = ggplot(pdata2, aes(rho, values, colour   = label_partial)) +
+#Weakly informative prior (S = 0.1)
+data0.1 = data%>%
+  filter(s == "s = 0.1" | framework == "Frequentist")
+data0.1 = tibble(framework = rep(data0.1$framework, 3),
+                blinded_convert = rep(data0.1$blinded_convert, 3),
+                label_partial = rep(data0.1$label_partial, 3),
+                rho = rep(data0.1$rho, 3),
+                values = c(data0.1$bias, data0.1$mse, data0.1$power),
+                metric = rep(c("Bias", "MSE", "Power"), each = nrow(data0.1)))
+
+p0.1 = ggplot(data0.1, aes(rho, values, colour   = label_partial)) +
   geom_line(aes(linetype = label_partial)) +
   geom_point() +
   facet_grid(metric~blinded_convert, scales="free_y") +
@@ -1720,9 +1568,18 @@ p0.1 = ggplot(pdata2, aes(rho, values, colour   = label_partial)) +
   ggtitle(expression(paste(italic("Weakly informative prior (s"), " = 0.1)")))
 
 p0.1 
-ggsave("wipP.pdf")
 
-p1 = ggplot(pdata3, aes(rho, values, colour   = label_partial)) +
+# Non-informative priors (S = 1)
+data1 = data%>%
+  filter(s == "s = 1" | framework == "Frequentist")
+data1 = tibble(framework = rep(data1$framework, 3),
+                blinded_convert = rep(data1$blinded_convert, 3),
+                label_partial = rep(data1$label_partial, 3),
+                rho = rep(data1$rho, 3),
+                values = c(data1$bias, data1$mse, data1$power),
+                metric = rep(c("Bias", "MSE", "Power"), each = nrow(data1)))
+
+p1 = ggplot(data1, aes(rho, values, colour   = label_partial)) +
   geom_line(aes(linetype = label_partial)) +
   geom_point() +
   facet_grid(metric~blinded_convert, scales="free_y") +
@@ -1744,28 +1601,11 @@ p1 = ggplot(pdata3, aes(rho, values, colour   = label_partial)) +
   ggtitle(expression(paste(italic("Non-informative prior (s"), " = 1)")))
 
 p1 
-ggsave("nipP.pdf")
-
-
-
-
 
 ################################################################################
-# FUNCTION TO GENERATE DATA FROM A SINGLE CLUSTER (CLUSTER SIZE REESTIMATION)  #
+#  CLUSTER (CLUSTER SIZE REESTIMATION) ***************************************** 
 ################################################################################
 
-data_one_cluster <- function(n, mu, allocation, tau, rho, sigma, type, cj) {
-  sigma_c <- sqrt(rho * sigma^2)
-  sigma_e <- sqrt(sigma^2 - sigma_c^2)
-  if (missing(cj)) {
-    cj    <- rnorm(1, sd = sigma_c)
-  }
-  if (type == "individual") {
-    rnorm(n, mu + allocation*tau + cj, sigma_e)
-  } else if (type == "cluster mean") {
-    rnorm(1, mu + allocation*tau + cj, sigma_e/sqrt(n))
-  }
-}
 
 ################################################################################
 # FUNCTION TO RETURN SAMPLE SIZE REQUIRED BY A PG-CRT IN THE FREQUENTIST       #
@@ -1791,11 +1631,12 @@ C(alpha = 0.025, beta = 0.2, sigma = 1.3, delta = 0.3, n = 17, rho = 0.059) #68
 
 n(alpha = 0.025, beta = 0.2, sigma = 1.3, delta = 0.3, C = 68, rho = 0.059) #17
 
+
 ################################################################################
 # FUNCTION TO SIMULATE IMPLEMENTATION OF SSR IN THE FREQUENTIST FRAMEWORK      #
 ################################################################################
 
-sim_trial_freq <- function(alpha, beta, sigma, delta, C, rho, mu, tau, blinded,
+clustersize_freq <- function(alpha, beta, sigma, delta, C, rho, mu, tau, blinded,
                            final_analysis, n_interim) {
   
   if (any(rho < 0, rho >= 1)) {
@@ -1815,7 +1656,7 @@ sim_trial_freq <- function(alpha, beta, sigma, delta, C, rho, mu, tau, blinded,
   cluster_means_before      <- numeric(C)
   for (c in 1:C) {
     range_c                 <- (1 + n_interim*(c - 1)):(n_interim*c)
-    outcomes[range_c]       <- data_one_cluster(n_interim, mu, allocations[c],
+    outcomes[range_c]       <- data_one_clustersize(n_interim, mu, allocations[c],
                                                 tau, rho, sigma, "individual",
                                                 cj[c])
     cluster_means_before[c] <- mean(outcomes[range_c])
@@ -1838,9 +1679,16 @@ sim_trial_freq <- function(alpha, beta, sigma, delta, C, rho, mu, tau, blinded,
   rho_hat                   <- temp[1, 4]/(temp[1, 4] + temp[2, 4])
   
   # Reestimated required number of clusters after the IA
-  n_reest_exact             <- n_reest <- n(alpha, beta, sigma, delta, C,
-                                            rho_hat)
-  
+   n_reest <- n(alpha, beta, sigma, delta, C, rho_hat)
+   
+  if(n_reest > 60) {
+    n_reest <- 60
+  } else if (n_reest < 0) {
+    n_reest <- 60
+  } else {
+    n_reest <- n_reest
+  }
+ 
   # Remaining number of samples
   n_remaining               <- n_reest - n_interim
   
@@ -1851,7 +1699,7 @@ sim_trial_freq <- function(alpha, beta, sigma, delta, C, rho, mu, tau, blinded,
     }
     # Degrees of freedom for the t-distribution at the IA
     interim_df              <- n_interim*C - n_interim - 1
-    return(c("n_reest_exact"   = n_reest_exact,
+    return(c("n_reest"         = n_reest,
              "n_final"         = n_interim,
              "rho_hat_interim" = rho_hat,
              "Reject H0"       =
@@ -1860,7 +1708,7 @@ sim_trial_freq <- function(alpha, beta, sigma, delta, C, rho, mu, tau, blinded,
   }
   
   if (!final_analysis) {
-    return(c("n_reest_exact"   = n_reest_exact,
+    return(c("n_reest"         = n_reest,
              "n_final"         = n_reest,
              "rho_hat_interim" = rho_hat,
              "Reject H0"       = NA))
@@ -1873,7 +1721,7 @@ sim_trial_freq <- function(alpha, beta, sigma, delta, C, rho, mu, tau, blinded,
   for (c in 1:C) {
     cluster_means_after[c]  <-
       (n_interim*cluster_means_before[c] +
-         sum(data_one_cluster(n_remaining, mu, allocations[c], tau, rho, sigma,
+         sum(data_one_clustersize(n_remaining, mu, allocations[c], tau, rho, sigma,
                               "individual", cj[c])))/n_reest
   }
   
@@ -1887,7 +1735,7 @@ sim_trial_freq <- function(alpha, beta, sigma, delta, C, rho, mu, tau, blinded,
        data = tibble(allocation = allocations,
                      outcome    = cluster_means_after))
   
-  c("n_reest_exact"   = n_reest_exact,
+  c("n_reest_exact"   = n_reest,
     "n_final"         = n_reest,
     "rho_hat_interim" = rho_hat,
     "Reject H0"       =
@@ -1897,7 +1745,7 @@ sim_trial_freq <- function(alpha, beta, sigma, delta, C, rho, mu, tau, blinded,
 }
 
 # Function check
-sim_trial_freq(alpha = 0.025, beta = 0.2, sigma = 1.3, delta = 0.3, C = 68,
+clustersize_freq(alpha = 0.025, beta = 0.2, sigma = 1.3, delta = 0.3, C = 68,
                mu = 0, tau = 0.3, rho = 0.059, blinded = FALSE,
                final_analysis = TRUE, n_interim = 8)
 
@@ -1906,9 +1754,9 @@ sim_trial_freq(alpha = 0.025, beta = 0.2, sigma = 1.3, delta = 0.3, C = 68,
 # CREATE A 'WRAPPER' FUNCTION FOR USE WITH SNOWFALL                            #
 ################################################################################
 
-wrapper_sim_trial_freq <- function(rep) {
+wrapper_clustersize_freq <- function(rep) {
   set.seed(rep)
-  sim_trial_freq(alpha, beta, sigma, delta, C, rho, mu, tau, blinded,
+  clustersize_freq(alpha, beta, sigma, delta, C, rho, mu, tau, blinded,
                  final_analysis, n_interim)
 }
 
@@ -1921,14 +1769,14 @@ sims_freq <- function(alpha, beta, sigma, delta, C, rho, mu, tau, blinded,
   
   # Make cpus the number of cores on your laptop you want to parallelise across
   sfInit(parallel = TRUE, cpus = 12)
-  sfExport("data_one_cluster", "sim_trial_freq", "n")
+  sfExport("data_one_clustersize", "clustersize_freq", "n")
   sfExport("delta", "beta", "alpha", "sigma", "C", "mu", "tau", "rho",
            "blinded","final_analysis", "n_interim")
   sfLibrary(snowfall)
   sfLibrary(tidyverse)
   sfLibrary(lme4)
   sfLibrary(tibble)
-  results <- sfLapply(1:replicates, wrapper_sim_trial_freq)
+  results <- sfLapply(1:replicates, wrapper_clustersize_freq)
   sfStop()
   results <- matrix(unlist(results), replicates, 4, byrow = TRUE)
   results <- cbind(n_reest         = results[, 1],
@@ -1940,7 +1788,6 @@ sims_freq <- function(alpha, beta, sigma, delta, C, rho, mu, tau, blinded,
        num_na     = sum(is.na(results)))
   
 }
-
 
 ################################################################################
 # PERFORMANCE OF FREQUENTIST SSR FOR EXAMPLE VALUE(S) OF RHO                   #
@@ -1984,127 +1831,31 @@ freq_table      <-
              unblinded_power[[1]][[4]], unblinded_typeI[[1]][[4]]))
 freq_table
 
-###############################################################################
-sim_trial_hybrid <- function(delta, alpha, sigma, C, m, s, mu, tau, rho,
-                             blinded, desired_ep, n_interim, final_analysis) {
-  if (any(rho < 0, rho >= 1)) {
-    stop("rho must be in [0,1)")
+
+# Rearrange the parameters of the Integrand to begin with rho
+ep_integrand      <- function(rho, delta, alpha, sigma, n, C, time, m, s,
+                              posterior_density, normalisation_constant) {
+  if (time == "pre-trial") {
+    frequentist_power(delta, rho, alpha, sigma, n, C)*
+      prior_density(rho, m, s)
+  } else if (time == "interim") {
+    frequentist_power(delta, rho, alpha, sigma, n, C)*
+      posterior_density(rho)/normalisation_constant
   }
-  
-  # Using C clusters for the reestimation
-  allocations               <- rep(0:1, each = C/2)
-  
-  # Store the cluster means before the IA
-  outcomes                  <- numeric(C*n_interim)
-  sigma_c                   <- sqrt(rho * sigma^2)
-  # So that you can have the correct correlation between outcomes before/after
-  # the re-estimation within a cluster, generate the cluster effects and store
-  # them
-  cj                        <- rnorm(C, sd = sigma_c)
-  cluster_means_before      <- numeric(C)
-  for (c in 1:C) {
-    range_c                 <- (1 + n_interim*(c - 1)):(n_interim*c)
-    outcomes[range_c]       <- data_one_cluster(n_interim, mu, allocations[c],
-                                                tau, rho, sigma, "individual",
-                                                cj[c])
-    cluster_means_before[c] <- mean(outcomes[range_c])
-  }
-  
-  # Analyse at individual level using mixed-model to extract rho_hat
-  data_interim              <-
-    tibble(cluster    = rep(1:C, each = n_interim),
-           allocation = rep(allocations, each = n_interim),
-           outcome    = outcomes)
-  if (blinded) {
-    model_ind               <- lmer(outcome ~ (1 | cluster),
-                                    data = data_interim)
-  } else if (!blinded) {
-    model_ind               <- lmer(outcome ~ allocation + (1 | cluster),
-                                    data = data_interim)
-  }
-  
-  temp                      <- as.data.frame(summary(model_ind)$varcor)
-  rho_hat                   <- temp[1, 4]/(temp[1, 4] + temp[2, 4])
-  
-  # Take the value of rho_hat and return the posterior density that can be used
-  # in a loop to re-estimate C
-  posterior_density         <- compute_posterior(rho_hat, n, n_interim, m, s)
-  rho_x                     <- seq(0, 1, 0.0001)
-  normalisation_constant    <- int.simpson2(rho_x, posterior_density(rho_x))
-  
-  # Reestimated required number of clusters after the IA
-  
-  for (n in 1:10000) {
-    if (ep(delta, alpha, sigma, n, C, "interim", m, s, posterior_density,
-           normalisation_constant) >= desired_ep) {
-      n_reest_exact         <- n_reest <- n
-      break
-    }
-  }
-  
-  if (n_reest%%2 != 0) {
-    n_reest                 <- n_reest + 1
-  }
-  
-  # Remaining number of samples
-  n_remaining               <- n_reest - n_interim
-  
-  if (n_remaining <= 0) { # Then IA becomes FA
-    if (blinded) {
-      model_ind             <- lmer(outcome ~ allocation + (1 | cluster),
-                                    data = data_interim)
-    }
-    # Degrees of freedom for the t-distribution at the IA
-    interim_df              <- n_interim*C - n_interim - 1
-    return(c("n_reest_exact"   = n_reest_exact,
-             "n_final"         = n_interim,
-             "rho_hat_interim" = rho_hat,
-             "Reject H0"       =
-               as.numeric(summary(model_ind)$coefficients[2, 3] >
-                            qt(1 - alpha, interim_df))))
-  }
-  
-  if (!final_analysis) {
-    return(c("n_reest_exact"   = n_reest_exact,
-             "n_final"         = n_reest,
-             "rho_hat_interim" = rho_hat,
-             "Reject H0"       = NA))
-  }
-  
-  # Simulate the data from the remaining clusters
-  cluster_means_after       <- numeric(C)
-  
-  # Cluster means after the interim analysis
-  for (c in 1:C) {
-    cluster_means_after[c]  <-
-      (n_interim*cluster_means_before[c] +
-         sum(data_one_cluster(n_remaining, mu, allocations[c], tau, rho, sigma,
-                              "individual", cj[c])))/n_reest
-  }
-  
-  # Degrees of freedom for the t-distribution at the FA
-  final_df                  <- n_reest*C - n_reest - 1
-  
-  # Combine the data from before and after the interim analysis in to a single
-  # dataset for final analysis. Pass this dataset to lm()
-  model_mean                <-
-    lm(outcome ~ allocation,
-       data = tibble(allocation = allocations,
-                     outcome    = cluster_means_after))
-  
-  c("n_reest_exact"   = n_reest_exact,
-    "n_final"         = n_reest,
-    "rho_hat_interim" = rho_hat,
-    "Reject H0"       =
-      as.numeric(summary(model_mean)$coefficients[2, 3] > qt(1 - alpha,
-                                                             final_df)))
-  
 }
 
+# Expected power
+ep                <- function(delta, alpha, sigma, n, C, time, m, s,
+                              posterior_density, normalisation_constant) {
+  integrate(ep_integrand, 0, 1,
+            delta = delta, alpha = alpha, sigma = sigma, n = n, C = C,
+            time = time, m = m, s = s, posterior_density = posterior_density,
+            normalisation_constant = normalisation_constant, stop.on.error = FALSE)$value
+}
 
 ################################################################################
 
-sim_trial_hybrid <- function(delta, alpha, sigma, C, m, s, mu, tau, rho,
+clustersize_hybrid <- function(delta, alpha, sigma, C, m, s, mu, tau, rho,
                              blinded, desired_ep, n_interim, final_analysis) {
   
   # Using C clusters for the reestimation
@@ -2120,7 +1871,7 @@ sim_trial_hybrid <- function(delta, alpha, sigma, C, m, s, mu, tau, rho,
   cluster_means_before      <- numeric(C)
   for (c in 1:C) {
     range_c                 <- (1 + n_interim*(c - 1)):(n_interim*c)
-    outcomes[range_c]       <- data_one_cluster(n_interim, mu, allocations[c],
+    outcomes[range_c]       <- data_one_clustersize(n_interim, mu, allocations[c],
                                                 tau, rho, sigma, "individual",
                                                 cj[c])
     cluster_means_before[c] <- mean(outcomes[range_c])
@@ -2164,7 +1915,7 @@ sim_trial_hybrid <- function(delta, alpha, sigma, C, m, s, mu, tau, rho,
   
   # Estimating the remaining number of clusters required with the new
   # information
-  nmax = 1000
+  nmax = 60
   for (n in 1:nmax) {
     if (ep(delta, alpha, sigma, n, C, "interim", m, s, posterior_density,
            normalisation_constant) >= desired_ep) {
@@ -2211,7 +1962,7 @@ sim_trial_hybrid <- function(delta, alpha, sigma, C, m, s, mu, tau, rho,
   for (c in 1:C) {
     cluster_means_after[c]  <-
       (n_interim*cluster_means_before[c] +
-         sum(data_one_cluster(n_remaining, mu, allocations[c], tau, rho, sigma,
+         sum(data_one_clustersize(n_remaining, mu, allocations[c], tau, rho, sigma,
                               "individual", cj[c])))/n_reest
   }
   
@@ -2234,19 +1985,18 @@ sim_trial_hybrid <- function(delta, alpha, sigma, C, m, s, mu, tau, rho,
   
 }
 
-sim_trial_hybrid(delta = 0.3, alpha = 0.025, sigma = 1.3, C = 68, m = 0.059,
+clustersize_hybrid(delta = 0.3, alpha = 0.025, sigma = 1.3, C = 68, m = 0.059,
                  s = 1, mu = 0, tau = 0.3, rho = 0.059, blinded = FALSE,
                  desired_ep = 0.8, n_interim = 8,
                  final_analysis = TRUE)
-
 
 ################################################################################
 # CREATE A 'WRAPPER' FUNCTION FOR USE WITH SNOWFALL                            #
 ################################################################################
 
-wrapper_sim_trial_hybrid <- function(rep) {
+wrapper_clustersize_hybrid <- function(rep) {
   set.seed(rep)
-  sim_trial_hybrid(delta, alpha, sigma, C, m, s, mu, tau, rho, blinded,
+  clustersize_hybrid(delta, alpha, sigma, C, m, s, mu, tau, rho, blinded,
                    desired_ep, n_interim, final_analysis)
 }
 
@@ -2261,7 +2011,7 @@ sims_hybrid <- function(delta, alpha, sigma, C, m, s, mu, tau,
   # Make cpus the number of cores on your laptop you want to parallelise across
   sfInit(parallel = TRUE, cpus = 12)
   sfExport("frequentist_power", "prior_density", "ep_integrand", "ep",
-           "data_one_cluster", "compute_posterior", "sim_trial_hybrid")
+           "data_one_clustersize", "compute_posterior", "clustersize_hybrid")
   sfExport("delta", "alpha", "sigma", "C", "m", "s", "mu", "tau", "rho",
            "blinded", "desired_ep", "n_interim", "final_analysis")
   sfLibrary(coda)
@@ -2273,7 +2023,7 @@ sims_hybrid <- function(delta, alpha, sigma, C, m, s, mu, tau,
   sfLibrary(snowfall)
   sfLibrary(tibble)
   sfLibrary(truncnorm)
-  results <- sfLapply(1:replicates, wrapper_sim_trial_hybrid)
+  results <- sfLapply(1:replicates, wrapper_clustersize_hybrid)
   sfStop()
   results <- matrix(unlist(results), replicates, 4, byrow = TRUE)
   results <- tibble(n_reest         = results[, 1],
@@ -2457,3 +2207,458 @@ results = tibble(framework     =      c("Frequentist",
                      unblinded_hybrid_power[[7]][[4]]))
 results
 
+median_results = tibble(framework     =      c("Frequentist",
+                                        "Frequentist",
+                                        "Frequentist",
+                                        "Frequentist",
+                                        "Hybrid",
+                                        "Hybrid",
+                                        "Hybrid",
+                                        "Hybrid",
+                                        "Hybrid",
+                                        "Hybrid",
+                                        "Hybrid",
+                                        "Hybrid",
+                                        "Hybrid",
+                                        "Hybrid",
+                                        "Hybrid",
+                                        "Hybrid"), 
+                 
+                 blinded       =      c("Blinded",
+                                        "Blinded",
+                                        "Unblinded",
+                                        "Unblinded",
+                                        "Blinded",
+                                        "Blinded",
+                                        "Blinded",
+                                        "Unblinded",
+                                        "Unblinded",
+                                        "Unblinded",
+                                        "Blinded",
+                                        "Blinded",
+                                        "Blinded",
+                                        "Unblinded",
+                                        "Unblinded",
+                                        "Unblinded"), 
+                 
+                 m             =     c(NA,
+                                       NA,
+                                       NA,
+                                       NA,
+                                       "m = 0.059",
+                                       "m = 0.059",
+                                       "m = 0.059",
+                                       "m = 0.059",
+                                       "m = 0.059",
+                                       "m = 0.059",
+                                       "m = 0.059",
+                                       "m = 0.059",
+                                       "m = 0.059",
+                                       "m = 0.059",
+                                       "m = 0.059",
+                                       "m = 0.059"),
+                 s             = c(NA,
+                                   NA,
+                                   NA,
+                                   NA,
+                                   "s = 0.01",
+                                   "s = 0.10",
+                                   "s = 1.00",
+                                   "s = 0.01",
+                                   "s = 0.10",
+                                   "s = 1.00",
+                                   "s = 0.01",
+                                   "s = 0.10",
+                                   "s = 1.00",
+                                   "s = 0.01",
+                                   "s = 0.10",
+                                   "s = 1.00"),
+                 
+                 
+                 
+                 tau           = c("tau == 0",
+                                   "tau == 0.3",
+                                   "tau == 0",
+                                   "tau == 0.3",
+                                   "tau == 0",
+                                   "tau == 0",
+                                   "tau == 0",
+                                   "tau == 0",
+                                   "tau == 0",
+                                   "tau == 0",
+                                   "tau == 0.3",
+                                   "tau == 0.3",
+                                   "tau == 0.3",
+                                   "tau == 0.3",
+                                   "tau == 0.3",
+                                   "tau == 0.3"),
+                 rho_hat_interim       =
+                   c(blinded_typeI[[1]][[3]],
+                     blinded_power[[1]][[3]],
+                     unblinded_typeI[[1]][[3]],
+                     unblinded_power[[1]][[3]],
+                     blinded_hybrid_typeI[[1]][[3]],
+                     blinded_hybrid_typeI[[4]][[3]],
+                     blinded_hybrid_typeI[[7]][[3]],
+                     unblinded_hybrid_typeI[[1]][[3]],
+                     unblinded_hybrid_typeI[[4]][[3]],
+                     unblinded_hybrid_typeI[[7]][[3]],
+                     blinded_hybrid_power[[1]][[3]],
+                     blinded_hybrid_power[[4]][[3]],
+                     blinded_hybrid_power[[7]][[3]],
+                     unblinded_hybrid_power[[1]][[3]],
+                     unblinded_hybrid_power[[4]][[3]],
+                     unblinded_hybrid_power[[7]][[3]]),
+                 
+                 n_reest       =
+                   c(median(blinded_typeI$results[,1]),
+                     median(blinded_power$results[,1]),
+                     median(unblinded_typeI$results[,1]),
+                     median(unblinded_power$results[,1]),
+                     median(blinded_hybrid_typeI[,1]$results[[1]]),
+                     median(blinded_hybrid_typeI[,2]$results[[1]]),
+                     median(blinded_hybrid_typeI[,3]$results[[1]]),
+                     median(unblinded_hybrid_typeI[,1]$results[[1]]),
+                     median(unblinded_hybrid_typeI[,2]$results[[1]]),
+                     median(unblinded_hybrid_typeI[,3]$results[[1]]),
+                     median(blinded_hybrid_power[,1]$results[[1]]),
+                     median(blinded_hybrid_power[,2]$results[[1]]),
+                     median(blinded_hybrid_power[,3]$results[[1]]),
+                     median(unblinded_hybrid_power[,1]$results[[1]]),
+                     median(unblinded_hybrid_power[,2]$results[[1]]),
+                     median(unblinded_hybrid_power[,3]$results[[1]])),
+                 
+                 Power       =
+                   c(blinded_typeI[[1]][[4]],
+                     blinded_power[[1]][[4]],
+                     unblinded_typeI[[1]][[4]],
+                     unblinded_power[[1]][[4]],
+                     blinded_hybrid_typeI[[1]][[4]],
+                     blinded_hybrid_typeI[[4]][[4]],
+                     blinded_hybrid_typeI[[7]][[4]],
+                     unblinded_hybrid_typeI[[1]][[4]],
+                     unblinded_hybrid_typeI[[4]][[4]],
+                     unblinded_hybrid_typeI[[7]][[4]],
+                     blinded_hybrid_power[[1]][[4]],
+                     blinded_hybrid_power[[4]][[4]],
+                     blinded_hybrid_power[[7]][[4]],
+                     unblinded_hybrid_power[[1]][[4]],
+                     unblinded_hybrid_power[[4]][[4]],
+                     unblinded_hybrid_power[[7]][[4]]))
+median_results
+
+
+
+
+
+# Plot the modal updated estimate of the ICC based on possible interim estimates
+# PLOT A -> Longer axis for P_int
+scenarios       <- expand.grid(m               = c(0.01, 0.059, 0.1),
+                               s               = c(0.01, 0.1,  1.00),
+                               rho_hat_interim = c(0.01, seq(0.05, 0.95, 0.05),
+                                                   0.99))
+modal_rho       <- numeric(nrow(scenarios))
+for (i in 1:nrow(scenarios)) {
+  posterior     <- compute_posterior(scenarios$rho_hat_interim[i], n = 17,
+                                     C = 26, m = scenarios$m[i],
+                                     s = scenarios$s[i])
+  modal_rho[i]  <- seq(0, 1, 0.0001)[which.max(posterior(seq(0, 1, 0.0001)))]
+}
+
+# Data for plotting the posterior of the interim estimate of the ICC
+data            <- tibble(m               = paste("m =", scenarios$m),
+                          s               = paste("s =", scenarios$s),
+                          m_s             =
+                            factor(paste("m = ", m, " s = ", s, sep = ""),
+                                   c("m = 0.01 s = 0.01",
+                                     "m = 0.059 s = 0.01",
+                                     "m = 0.1 s = 0.01",
+                                     "m = 0.01 s = 0.1",
+                                     "m = 0.059 s = 0.1",
+                                     "m = 0.1 s = 0.1",
+                                     "m = 0.01 s = 1",
+                                     "m = 0.059 s = 1",
+                                     "m = 0.1 s = 1")),
+                          rho_hat_interim = scenarios$rho_hat_interim,
+                          modal_rho       = modal_rho)
+
+# Plot of posterior density based on the interim estimate of the ICC
+A = ggplot(data = data, aes(x = rho_hat_interim, y = modal_rho, colour = m,
+                            linetype = s)) +
+  geom_line() +
+  geom_point() +
+  theme_bw() +
+  theme(legend.position = "bottom",
+        legend.title    = element_blank()) +
+  scale_colour_colorblind(labels =
+                            c(expression(paste(italic(m), " = 0.010")),
+                              expression(paste(italic(m), " = 0.059")),
+                              expression(paste(italic(m), " = 0.100")))) +
+  scale_linetype_discrete(labels =
+                            c(expression(paste(italic(s), " = 0.01")),
+                              expression(paste(italic(s), " = 0.10")),
+                              expression(paste(italic(s), " = 1.00")))) +
+  xlab(expression(hat(rho)[int])) +
+  ylab(expression(paste(italic(Mode), "{", psi[ICC], "(", rho, " | ",
+                        italic(m), ", ", italic(s), ", ", hat(rho)[int], ")}")))
+
+A
+
+shortaxis = ggplot(data = newdata, aes(x = rho_hat_interim, y = modal_rho, colour = m,
+                                    linetype = s)) +
+  geom_line() +
+  geom_point() +
+  theme_bw() +
+  theme(legend.position = "bottom",
+        legend.title    = element_blank()) +
+  scale_colour_colorblind(labels =
+                            c(expression(paste(italic(m), " = 0.010")),
+                              expression(paste(italic(m), " = 0.059")),
+                              expression(paste(italic(m), " = 0.100")))) +
+  scale_linetype_discrete(labels =
+                            c(expression(paste(italic(s), " = 0.01")),
+                              expression(paste(italic(s), " = 0.10")),
+                              expression(paste(italic(s), " = 1.00")))) +
+  xlab(expression(hat(rho)[int])) +
+  ylab(expression(paste(italic(Mode), "{", psi[ICC], "(", rho, " | ",
+                        italic(m), ", ", italic(s), ", ", hat(rho)[int], ")}")))
+
+
+
+# Plot the modal updated estimate of the ICC based on possible interim estimates
+# PLOT B -> Narrower axis for P_int
+scenarios       <- expand.grid(m               = c(0.01, 0.059, 0.1),
+                               s               = c(0.01, 0.1,  1.00),
+                               rho_hat_interim = c(0.001, seq(0.01, 0.095, 0.005),
+                                                   0.099))
+modal_rho       <- numeric(nrow(scenarios))
+for (i in 1:nrow(scenarios)) {
+  posterior     <- compute_posterior(scenarios$rho_hat_interim[i], n = 17,
+                                     C = 26, m = scenarios$m[i],
+                                     s = scenarios$s[i])
+  modal_rho[i]  <- seq(0, 1, 0.0001)[which.max(posterior(seq(0, 1, 0.0001)))]
+}
+
+# Data for plotting the posterior of the interim estimate of the ICC
+data            <- tibble(m               = paste("m =", scenarios$m),
+                          s               = paste("s =", scenarios$s),
+                          m_s             =
+                            factor(paste("m = ", m, " s = ", s, sep = ""),
+                                   c("m = 0.01 s = 0.01",
+                                     "m = 0.059 s = 0.01",
+                                     "m = 0.1 s = 0.01",
+                                     "m = 0.01 s = 0.1",
+                                     "m = 0.059 s = 0.1",
+                                     "m = 0.1 s = 0.1",
+                                     "m = 0.01 s = 1",
+                                     "m = 0.059 s = 1",
+                                     "m = 0.1 s = 1")),
+                          rho_hat_interim = scenarios$rho_hat_interim,
+                          modal_rho       = modal_rho)
+
+# Plot of posterior density based on the interim estimate of the ICC
+B = ggplot(data = data, aes(x = rho_hat_interim, y = modal_rho, colour = m,
+                            linetype = s)) +
+  geom_line() +
+  geom_point() +
+  theme_bw() +
+  theme(legend.position = "bottom",
+        legend.title    = element_blank()) +
+  scale_colour_colorblind(labels =
+                            c(expression(paste(italic(m), " = 0.010")),
+                              expression(paste(italic(m), " = 0.059")),
+                              expression(paste(italic(m), " = 0.100")))) +
+  scale_linetype_discrete(labels =
+                            c(expression(paste(italic(s), " = 0.01")),
+                              expression(paste(italic(s), " = 0.10")),
+                              expression(paste(italic(s), " = 1.00")))) +
+  xlab(expression(hat(rho)[int])) +
+  ylab(expression(paste(italic(Mode), "{", psi[ICC], "(", rho, " | ",
+                        italic(m), ", ", italic(s), ", ", hat(rho)[int], ")}")))
+
+B
+
+#PLOT OF RHO_HAT VS REESTIMATED NUMBER OF CLUSTERS
+# Rearrange the Expected power to make it a function of C
+ep                <- function(C, delta, alpha, sigma, n, time, m, s,
+                              posterior_density, normalisation_constant) {
+  integrate(ep_integrand, 0, 1,
+            delta = delta, alpha = alpha, sigma = sigma, n = n, C = C,
+            time = time, m = m, s = s, posterior_density = posterior_density,
+            normalisation_constant = normalisation_constant, stop.on.error = FALSE)$value
+}
+
+wrapper <- function(C,delta, alpha, sigma, n, time, m, s, posterior_density,
+                    normalisation_constant, desired_ep) {
+  ep(C,delta, alpha, sigma, n, time, m, s, posterior_density, 
+     normalisation_constant) - desired_ep
+}
+
+
+# Adding the frequentist approach to the reestimated number of clusters plot
+# PLOT C -> Longer axis for P_int
+PG_SS <- function(alpha, beta, sigma, delta, n, rho) {
+  irt           <- 4*(qnorm(1 - alpha) + qnorm(1 - beta))^2*(sigma^2)/(delta^2)
+  design_effect <- 1 + (n - 1)*rho
+  ceiling(irt*design_effect/n)
+}
+
+rho_hat_interim = c(0.01, seq(0.05, 0.95, 0.05),
+                    0.99)
+
+frequentist_sample  <- numeric(length(rho_hat_interim))
+
+for (i in 1:length(frequentist_sample)){
+  frequentist_sample[i] = PG_SS(alpha = 0.025, beta = 0.2, sigma =1.3, 
+                                delta = 0.3, n = 17, rho = rho_hat_interim[i])
+}
+
+frequentist_data = tibble(
+  rho_hat_interim = rho_hat_interim,
+  m               = as.factor(rep("Frequentist", length(rho_hat_interim))),
+  s               = as.factor(rep("Frequentist", length(rho_hat_interim))),
+  C_reest         = frequentist_sample)
+
+scenarios       <- expand.grid(m               = c(0.01, 0.059, 0.1),
+                               s               = c(0.01, 0.1,  1.00),
+                               rho_hat_interim = rho_hat_interim)
+hybrid_sample       <- numeric(nrow(scenarios))
+
+
+set.seed(1004)
+
+for (i in 1:nrow(scenarios)) {
+  
+  posterior_density         <- compute_posterior(scenarios$rho_hat_interim[i], 
+                                                 n = 17, C = 26, 
+                                                 m = scenarios$m[i],
+                                                 s = scenarios$s[i])
+  
+  rho_x                     <- seq(0, 1, 0.0001)
+  normalisation_constant    <- int.simpson2(rho_x, posterior_density(rho_x))
+  
+  hybrid_sample[i] = uniroot(wrapper, c(1e-6, 1e6), delta = 0.3, alpha = 0.025, 
+                             sigma =1.3, n = 17, time = "interim", 
+                             m = scenarios$m[i], s = scenarios$s[i], 
+                             posterior_density = posterior_density,
+                             normalisation_constant = normalisation_constant, 
+                             desired_ep = 0.8)$root
+}
+
+hybrid_data = tibble(
+  rho_hat_interim = scenarios$rho_hat_interim,
+  m               = as.factor(scenarios$m),
+  s               = as.factor(scenarios$s),
+  C_reest         = hybrid_sample)
+
+data = rbind(hybrid_data, frequentist_data)
+
+#Plot C longer axis for rho_int
+C = ggplot(data, aes(rho_hat_interim, C_reest, colour = m, linetype = s)) +
+  geom_line() +
+  geom_point()+
+  theme_bw()+
+  theme(legend.position = "bottom",
+        legend.title    = element_blank()) +
+  xlab(expression(hat(rho)[int])) +
+  ylab(expression(paste(
+    italic(C)[reest])))+
+  scale_linetype_discrete(labels =
+                            c(
+                              expression(paste(italic(s), " = 0.01")),
+                              expression(paste(italic(s), " = 0.10")),
+                              expression(paste(italic(s), " = 1.00")),
+                              "Frequentist")) +
+  scale_colour_colorblind(labels =
+                            c(
+                              expression(paste(italic(m), " = 0.01")),
+                              expression(paste(italic(m), " = 0.059")),
+                              expression(paste(italic(m), " = 0.10")),
+                              "Frequentist"))
+C
+
+# PLOT D -> Narrower axis for P_int
+rho_hat_interim = c(0.001, seq(0.01, 0.095, 0.005),
+                    0.099)
+
+frequentist_sample  <- numeric(length(rho_hat_interim))
+
+for (i in 1:length(frequentist_sample)){
+  frequentist_sample[i] = PG_SS(alpha = 0.025, beta = 0.2, sigma =1.3, 
+                                delta = 0.3, n = 17, rho = rho_hat_interim[i])
+}
+
+frequentist_data = tibble(
+  rho_hat_interim = rho_hat_interim,
+  m               = as.factor(rep("Frequentist", length(rho_hat_interim))),
+  s               = as.factor(rep("Frequentist", length(rho_hat_interim))),
+  C_reest         = frequentist_sample)
+
+scenarios       <- expand.grid(m               = c(0.01, 0.059, 0.1),
+                               s               = c(0.01, 0.1,  1.00),
+                               rho_hat_interim = rho_hat_interim)
+hybrid_sample       <- numeric(nrow(scenarios))
+
+
+set.seed(1004)
+
+for (i in 1:nrow(scenarios)) {
+  
+  posterior_density         <- compute_posterior(scenarios$rho_hat_interim[i], 
+                                                 n = 17, C = 26, 
+                                                 m = scenarios$m[i],
+                                                 s = scenarios$s[i])
+  
+  rho_x                     <- seq(0, 1, 0.0001)
+  normalisation_constant    <- int.simpson2(rho_x, posterior_density(rho_x))
+  
+  hybrid_sample[i] = uniroot(wrapper, c(1e-8, 1e8), delta = 0.3, alpha = 0.025, 
+                             sigma =1.3, n = 17, time = "interim", 
+                             m = scenarios$m[i], s = scenarios$s[i], 
+                             posterior_density = posterior_density,
+                             normalisation_constant = normalisation_constant, 
+                             desired_ep = 0.8)$root
+}
+
+hybrid_data = tibble(
+  rho_hat_interim = scenarios$rho_hat_interim,
+  m               = as.factor(scenarios$m),
+  s               = as.factor(scenarios$s),
+  C_reest         = hybrid_sample)
+
+data = rbind(hybrid_data, frequentist_data)
+
+D = ggplot(data, aes(rho_hat_interim, C_reest, colour = m, linetype = s)) +
+  geom_line() +
+  geom_point()+
+  theme_bw()+
+  theme(legend.position = "bottom",
+        legend.title    = element_blank()) +
+  xlab(expression(hat(rho)[int])) +
+  ylab(expression(paste(
+    italic(C)[reest])))+
+  scale_linetype_discrete(labels =
+                            c(
+                              expression(paste(italic(s), " = 0.01")),
+                              expression(paste(italic(s), " = 0.10")),
+                              expression(paste(italic(s), " = 1.00")),
+                              "Frequentist")) +
+  scale_colour_colorblind(labels =
+                            c(
+                              expression(paste(italic(m), " = 0.01")),
+                              expression(paste(italic(m), " = 0.059")),
+                              expression(paste(italic(m), " = 0.10")),
+                              "Frequentist"))
+D
+
+#Use ggarrange to plot both graphs for comparison
+figure_1 <- ggarrange(A, C,
+                      labels = c("A", "B"),
+                      nrow = 2)
+figure_1
+
+
+figure_2 <- ggarrange(B, D,
+                      labels = c("A", "B"),
+                      nrow = 2)
+figure_2
